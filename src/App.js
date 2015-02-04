@@ -11,27 +11,71 @@ Ext.define('CustomApp', {
 
     items: [
         {
-            xtype: 'rallyreleasecombobox',
-            fieldLabel: 'Release',
-            labelAlign: 'right',
-            width: 300,
-            itemId: 'rallyRelease',
-            listeners: {
-                ready: function () {
-                    var app = this.up('#burnupApp');
-                    app.setSelectedRelease(this);  // This is scoped to the the combobox object
-                },
-                select: function () {
-                    var app = this.up('#burnupApp');
-                    app.setSelectedRelease(this);  // This is scoped to the the combobox object
+            xtype: 'panel',
+            itemId: 'topPanel',
+            layout: { type: 'hbox', align: 'left' },
+
+            items: [{
+                xtype: 'rallyreleasecombobox',
+                fieldLabel: 'Release:',
+                labelAlign: 'right',
+    			margin: 8,
+                width: 300,
+                itemId: 'releaseCombo',
+                listeners: {
+                    ready: function () {
+                        var app = this.up('#burnupApp');
+
+                        app.setSelectedRelease(this);  // This is scoped to the the combobox object
+                    },
+                    select: function () {
+                        var app = this.up('#burnupApp');
+
+                        app.setSelectedRelease(this);  // This is scoped to the the combobox object
+                    }
                 }
-            }
+            }, {
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Milestone Titles',
+                labelAlign: 'right',
+    			margin: 8,
+                value: true,
+                handler: function(checkbox, showLabels) {
+                    app.removeAllMilestonePlotLines();
+                    app.addMilestonePlotLines(showLabels);
+                }
+            }, {
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Include Defects',
+                labelAlign: 'right',
+    			margin: 8,
+                value: false,
+                itemId: 'includeDefects',
+                handler: function(checkbox, showLabels) {
+                    var releaseCombo = app.down('#releaseCombo');
+
+                    console.log('releaseCombo', releaseCombo);
+                    app.setSelectedRelease(releaseCombo);
+                }
+            }]
         }
     ],
 
-    // Called when the release combo box is ready or selected.  This triggers the bulding of the chart.
+    setLoading: function(value) {
+        var topPanel = this.down('#topPanel');
+
+        topPanel.setLoading(value);
+    },
+
+    includeDefects: function() {
+        var checkbox = this.down('#includeDefects');
+
+        return checkbox.value;
+    },
+
+    // Called when the release combo box is ready or selected.  This triggers the building of the chart.
     setSelectedRelease: function(releaseCombo) {
-        releaseCombo.setLoading(true);
+        this.setLoading(true);
 
         var releaseName = releaseCombo.getRecord().data.Name;
 
@@ -258,12 +302,16 @@ Ext.define('CustomApp', {
 
     },
 
-    resetChart: function(mesg) {
-        var releaseCombo = app.down('#rallyRelease');
+    resetData: function() {
+        delete app.defectSnapshots;
+        delete app.featureSnapshots;
+    },
 
-        releaseCombo.setLoading(false);
+    resetChart: function(mesg) {
+        app.setLoading(false);
 
         var chart = app.down("#chart1");
+
         if (chart !== null) {
             chart.removeAll();
         }
@@ -340,7 +388,6 @@ Ext.define('CustomApp', {
     },
 
     queryFeatureSnapshots : function () {
-
         var ids = _.pluck(app.features, function(feature) { return feature.get("ObjectID");} );
         // var pes = _.pluck(app.features, function(feature) { return feature.get("PreliminaryEstimate");} );
         var extent = app.getReleaseExtent(app.releases);
@@ -355,28 +402,87 @@ Ext.define('CustomApp', {
             autoLoad : true,
             pageSize:1000,
             limit: 'Infinity',
-            fetch: ['_UnformattedID','ObjectID','_TypeHierarchy','PreliminaryEstimate', 'LeafStoryCount','LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal','AcceptedLeafStoryCount','PercentDoneByStoryCount','RefinedEstimate'],
-            hydrate: ['_TypeHierarchy']
+//            fetch: ['_UnformattedID','ObjectID','_TypeHierarchy','PreliminaryEstimate', 'LeafStoryCount','LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal','AcceptedLeafStoryCount','PercentDoneByStoryCount','RefinedEstimate']
+            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal']
+        };
+
+        console.log('releases', _.map(app.releases, function (release) { return release.data.ObjectID; }));
+
+        var relIDs = _.map(app.releases, function (release) { return release.data.ObjectID; });
+        var defectStoreConfig = {
+            find: {
+                '_TypeHierarchy': { "$in" : ["Defect"] },
+                'Release': { "$in" : relIDs },
+                'PlanEstimate': { "$gt" : 0 },
+                '_ValidTo': { "$gte" : extent.isoStart }
+            },
+            autoLoad : true,
+            pageSize: 1000,
+            limit: 'Infinity',
+            fetch: ['PlanEstimate', 'ScheduleState'],
+            hydrate: ['ScheduleState'],
+            listeners: {
+                load: function(store, snapshots, success) {
+                console.log("Loaded:"+snapshots.length," Defects snapshots");
+
+                    app.gotSnapshotData('defects', snapshots);
+                }
+            }
         };
 
         storeConfig.listeners = {
             scope : this,
             load: function(store, snapshots, success) {
-                console.log("Loaded:"+snapshots.length," Snapshots.");
-                app.createChartData(snapshots);
+                console.log("Loaded:"+snapshots.length," Feature Snapshots.");
+
+                app.gotSnapshotData('features', snapshots);
             }
         };
 
-        var snapshotStore = Ext.create('Rally.data.lookback.SnapshotStore', storeConfig);
+        app.resetData();
+
+        Ext.create('Rally.data.lookback.SnapshotStore', storeConfig);
+
+        if (this.includeDefects()) {
+            Ext.create('Rally.data.lookback.SnapshotStore', defectStoreConfig);
+        } else {
+            app.defectSnapshots = [];
+        }
+    },
+
+    //
+    // Make defectsSnapshots look like feature Snapshots by populating "Total" fields
+    // that our found in feature level portfolio items
+    //
+    normalizeDefectSnapshotData: function(defectSnapshots) {
+
+        _(defectSnapshots).forEach(function(defect) {
+            defect.data['LeafStoryPlanEstimateTotal'] = defect.data['PlanEstimate'];
+
+            defect.data['AcceptedLeafStoryPlanEstimateTotal']
+            	= defect.data['ScheduleState'] === 'Accepted' ? defect.data['PlanEstimate'] : 0;
+        });
+
+        return defectSnapshots;
+    },
+
+    gotSnapshotData: function(type, snapshots) {
+        if (type == 'defects') {
+            app.defectSnapshots = app.normalizeDefectSnapshotData(snapshots);
+
+        } else if (type == 'features') {
+            app.featureSnapshots = snapshots;
+        }
+
+        if (app.defectSnapshots && app.featureSnapshots) {
+            app.createChartData(app.featureSnapshots.concat(app.defectSnapshots));
+        }
     },
 
     createChartData : function ( snapshots ) {
-
-        var that		 = this;
         var lumenize	 = window.parent.Rally.data.lookback.Lumenize;
         var snapShotData = _.map(snapshots,function(d){return d.data;});
         var extent		 = app.getReleaseExtent(app.releases);
-        var snaps		 = _.sortBy(snapShotData,"_UnformattedID");
 
         // can be used to 'knockout' holidays
         var holidays = [
@@ -405,6 +511,7 @@ Ext.define('CustomApp', {
         var upToDateISOString = new lumenize.Time(extent.end).getISOStringInTZ(config.tz);
         // create the calculator and add snapshots to it.
         calculator = new lumenize.TimeSeriesCalculator(config);
+console.log('snapshot', snapShotData);
         calculator.addSnapshots(snapShotData, startOnISOString, upToDateISOString);
 
         // create a high charts series config object, used to get the hc series data
@@ -419,6 +526,37 @@ Ext.define('CustomApp', {
         var hc = lumenize.arrayOfMaps_To_HighChartsSeries(calculator.getResults().seriesData, hcConfig);
 
         this.showChart( trimHighChartsConfig(hc) );
+    },
+
+    getChartXAxis: function() {
+        var chart = app.down("highchart").chart;
+        var xAxisArray = chart.xAxis;
+
+        return xAxisArray[0];
+    },
+
+    removeAllMilestonePlotLines: function() {
+        var xAxis		= this.getChartXAxis();
+        var plotLines	= xAxis.plotLinesAndBands;
+        var ids			= [];
+            _(plotLines).forEach(function(plotLine) {
+                if (plotLine && plotLine.id) {
+                    ids.push(plotLine.id);
+                }
+            });
+
+        _(ids).forEach(function(id) {
+        	xAxis.removePlotLine(id);
+        });
+    },
+
+    addMilestonePlotLines: function(showLabelTitles) {
+        var xAxis		= this.getChartXAxis();
+        var miPlotLines = this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles);
+
+        _(miPlotLines).forEach(function(plotLine) {
+            xAxis.addPlotLine(plotLine);
+        });
     },
 
     //
@@ -442,15 +580,15 @@ Ext.define('CustomApp', {
     // We could not find a way to display a diamond, but the character "8" in the Rally font is a downward pointing triangle/arrow
     // which is pretty close.  So we will display that in the color of the milestone.
     //
-    parsePlotLines: function(seriesDates, recordArray, dateField, plotLineStyle) {
-        var yLabelOffset = 0;
+    getPlotLineConfigs: function(seriesDates, recordArray, dateField, plotLineStyle) {
+        var plotLineCount = 0;
 
-        var plotlines = _.map(recordArray, function(record){
+        var plotLineConfigs = _.map(recordArray, function(record){
             var d = new Date(Date.parse(record.raw[dateField])).toISOString().split("T")[0];
 
             var color = plotLineStyle.color || record.get("DisplayColor") || "grey";
             var labelHTML = '<span style="font-family:Rally;color:' + color + '">8</span>'; // 8 is a downward pointing triangle in the Rally font
-            var labelText = record.get("Name");
+            var labelTitle = record.get("Name");
 
             var plotLineConfig = {
                 dashStyle: "Dot",
@@ -460,16 +598,24 @@ Ext.define('CustomApp', {
             };
 
             if (plotLineStyle.showLabel) {
-                    plotLineConfig.label = {
-                    text: labelHTML + labelText,
+                var text = labelHTML;
+                var yLabelOffset = 0;
+
+                if (plotLineStyle.showLabelTitles) {
+                    text += labelTitle;
+                    yLabelOffset = (plotLineCount % 2) * 15; // Lower ever other label (via mod 2)
+                }
+
+                plotLineConfig.label = {
+                    text: text,
                     rotation: 0,
                     verticalAlign: 'top',
-                    y: yLabelOffset % 2*15,
+                    y: yLabelOffset,
                     x: -6,
                     textAlign: 'left',
                     useHTML: true
                 };
-                yLabelOffset++;
+                plotLineCount++;
             }
 
             if (plotLineStyle.canRemove) {
@@ -513,7 +659,13 @@ Ext.define('CustomApp', {
 
             return plotLineConfig;
         });
-        return plotlines;
+        return plotLineConfigs;
+    },
+
+    getMilestonePlotLineConfigs: function(seriesDates, showLabelTitles) {
+        var plotLineStyle	= { dashStyle: 'dash', width: 2, showLabel: true, showLabelTitles: showLabelTitles, canRemove: true };
+
+        return this.getPlotLineConfigs(seriesDates, this.milestones, 'TargetDate', plotLineStyle);
     },
 
     //
@@ -532,9 +684,7 @@ Ext.define('CustomApp', {
     //
     // Milestone plot lines can be temporarily removed from the graph by clicking on them.
     //
-    getPlotLines: function(seriesDates) {
-        var app = this;
-
+    getAllPlotLineConfigs: function(seriesDates) {
         // filter the iterations
         var start = new Date( Date.parse(seriesDates[0]));
         var end   = new Date( Date.parse(seriesDates[seriesDates.length-1]));
@@ -542,20 +692,19 @@ Ext.define('CustomApp', {
         var iterations = _.filter(this.iterations,function(i) { return i.get("EndDate") >= start && i.get("EndDate") <= end;});
             iterations = _.uniq(iterations ,function(i) { return i.get("Name");});
 
-        var itPlotLines = this.parsePlotLines(seriesDates, iterations, 'EndDate',                { dashStyle: 'dot', color: 'grey'} );
-        var rePlotLines = this.parsePlotLines(seriesDates, this.selectedReleases, 'ReleaseDate', { dashStyle: 'dot', color: 'grey'} );
-        var miPlotLines = this.parsePlotLines(seriesDates, this.milestones, 'TargetDate',        { dashStyle: 'dash', width: 2, showLabel: true, canRemove: true } );
+        var itPlotLines = this.getPlotLineConfigs(seriesDates, iterations, 'EndDate',                { dashStyle: 'dot', color: 'grey'} );
+        var rePlotLines = this.getPlotLineConfigs(seriesDates, this.selectedReleases, 'ReleaseDate', { dashStyle: 'dot', color: 'grey'} );
+        var miPlotLines = this.getMilestonePlotLineConfigs(seriesDates, true);
 
         return itPlotLines.concat(rePlotLines).concat(miPlotLines);
     },
 
     showChart : function(series) {
-        var that = this;
-
         app.resetChart();
+        app.seriesDates = series[0].data;
 
         // create plotlines
-        var plotlines = this.getPlotLines(series[0].data);
+        var plotlines = this.getAllPlotLineConfigs(app.seriesDates);
 
         // set the tick interval
         var tickInterval = series[1].data.length <= (7*20) ? 7 : (series[1].data.length / 20);
@@ -571,9 +720,10 @@ Ext.define('CustomApp', {
             chartColors : createColorsArray(series),
 
             chartConfig : {
+                id: 'highchartBurndown',
                 chart: { },
                 title: {
-                    text: 'Release Burnup',
+                    text: 'Release Burnup by PI Feature',
                     x: -20 //center
                 },
                 plotOptions: {

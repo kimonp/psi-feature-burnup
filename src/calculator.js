@@ -155,5 +155,5 @@ Ext.define("MyBurnCalculator", function() {
             return (!_.isUndefined(v) && !_.isNull(v));
         }
     };
-   
+
 });
