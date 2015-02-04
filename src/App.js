@@ -19,7 +19,7 @@ Ext.define('CustomApp', {
                 xtype: 'rallyreleasecombobox',
                 fieldLabel: 'Release:',
                 labelAlign: 'right',
-    			margin: 8,
+                margin: 8,
                 width: 300,
                 itemId: 'releaseCombo',
                 listeners: {
@@ -38,7 +38,7 @@ Ext.define('CustomApp', {
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Milestone Titles',
                 labelAlign: 'right',
-    			margin: 8,
+                margin: 8,
                 value: true,
                 handler: function(checkbox, showLabels) {
                     app.removeAllMilestonePlotLines();
@@ -48,7 +48,7 @@ Ext.define('CustomApp', {
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Include Defects',
                 labelAlign: 'right',
-    			margin: 8,
+                margin: 8,
                 value: false,
                 itemId: 'includeDefects',
                 handler: function(checkbox, showLabels) {
@@ -141,10 +141,10 @@ Ext.define('CustomApp', {
         }
         app.setLoading(true);
 
-        app.series			 = createSeriesArray();
-        app.configReleases	 = app.getSetting("releases") || app.defaultRelease;
+        app.series           = createSeriesArray();
+        app.configReleases   = app.getSetting("releases") || app.defaultRelease;
         app.ignoreZeroValues = app.getSetting("ignoreZeroValues");
-        app.epicIds			 = app.getSetting("epicIds");
+        app.epicIds          = app.getSetting("epicIds");
 
         if (app.configReleases === "") {
             this.resetChart("Please Configure this app by selecting Edit App Settings from Configure (gear) Menu");
@@ -218,7 +218,7 @@ Ext.define('CustomApp', {
                 var includeDefects = app.includeDefects();
 
                 if ((includeDefects && app.defectSnapshots) || (!includeDefects && app.featureSnapshots)) {
-                    app.createAndShowBurndownChart();
+                    app.createChartData();
 
                 } else {
                     if (app.epicIds && app.epicIds.split(",")[0] !== "")
@@ -443,7 +443,7 @@ Ext.define('CustomApp', {
             }
         };
 
-        if (this.featureSnapshots == null) {
+        if (!this.featureSnapshots) {
             console.log("Querying for feature snapshots");
             Ext.create('Rally.data.lookback.SnapshotStore', storeConfig);
         }
@@ -460,10 +460,10 @@ Ext.define('CustomApp', {
     normalizeDefectSnapshotData: function(defectSnapshots) {
 
         _(defectSnapshots).forEach(function(defect) {
-            defect.data['LeafStoryPlanEstimateTotal'] = defect.data['PlanEstimate'];
+            defect.data.LeafStoryPlanEstimateTotal = defect.data.PlanEstimate;
 
-            defect.data['AcceptedLeafStoryPlanEstimateTotal']
-            	= defect.data['ScheduleState'] === 'Accepted' ? defect.data['PlanEstimate'] : 0;
+            defect.data.AcceptedLeafStoryPlanEstimateTotal =
+                defect.data.ScheduleState === 'Accepted' ? defect.data.PlanEstimate : 0;
         });
 
         return defectSnapshots;
@@ -477,19 +477,18 @@ Ext.define('CustomApp', {
             app.featureSnapshots = snapshots;
         }
 
-        // Make sure we have all the data needed before creating the chart
+        // Make sure we have all the data needed before drawing the graph
         if ((!app.includeDefects() || app.defectSnapshots) && app.featureSnapshots) {
-            app.createAndShowBurndownChart();
+            app.createChartData();
         }
     },
 
-    createAndShowBurndownChart : function () {
-        var snapshots = this.includeDefects() && app.defectSnapshots
-                        	? app.featureSnapshots.concat(app.defectSnapshots)
-                            : app.featureSnapshots;
-        var lumenize	 = window.parent.Rally.data.lookback.Lumenize;
+    createChartData : function () {
+        var snapshots    = this.includeDefects() && app.defectSnapshots ?
+                            app.featureSnapshots.concat(app.defectSnapshots) : app.featureSnapshots;
+        var lumenize     = window.parent.Rally.data.lookback.Lumenize;
         var snapShotData = _.map(snapshots,function(d){return d.data;});
-        var extent		 = app.getReleaseExtent(app.releases);
+        var extent       = app.getReleaseExtent(app.releases);
 
         // can be used to 'knockout' holidays
         var holidays = [
@@ -552,7 +551,7 @@ Ext.define('CustomApp', {
             });
 
         _(ids).forEach(function(id) {
-        	xAxis.removePlotLine(id);
+            xAxis.removePlotLine(id);
         });
     },
 
@@ -625,8 +624,8 @@ Ext.define('CustomApp', {
             }
 
             if (plotLineStyle.canRemove) {
-                var name		 = record.get("Name");
-                var plotLineId   = 'milestone-' + name;
+                var name       = record.get("Name");
+                var plotLineId = 'milestone-' + name;
 
                 plotLineConfig.id = plotLineId;
 
@@ -644,7 +643,7 @@ Ext.define('CustomApp', {
                         var labelRE		= new RegExp(labelText);
 
                         if (this.label.text.match(labelRE)) {
-                        	newPlotLine.label.text = labelHTML;
+                            newPlotLine.label.text = labelHTML;
 
                         } else {
                             newPlotLine.label.text = labelHTML + labelText;
