@@ -52,10 +52,7 @@ Ext.define('CustomApp', {
                 value: false,
                 itemId: 'includeDefects',
                 handler: function(checkbox, showLabels) {
-                    var releaseCombo = app.down('#releaseCombo');
-
-                    console.log('releaseCombo', releaseCombo);
-                    app.setSelectedRelease(releaseCombo);
+                    app.createChart();
                 }
             }]
         }
@@ -75,11 +72,10 @@ Ext.define('CustomApp', {
 
     // Called when the release combo box is ready or selected.  This triggers the building of the chart.
     setSelectedRelease: function(releaseCombo) {
-        this.setLoading(true);
-
         var releaseName = releaseCombo.getRecord().data.Name;
-
         this.defaultRelease = releaseName;
+
+        this.resetData();
         this.createChart();
     },
 
@@ -143,6 +139,7 @@ Ext.define('CustomApp', {
         if (!app) {
             app = this;
         }
+        app.setLoading(true);
 
         app.series			 = createSeriesArray();
         app.configReleases	 = app.getSetting("releases") || app.defaultRelease;
@@ -218,10 +215,17 @@ Ext.define('CustomApp', {
 
                 app.iterations = results[0];
 
-                if (app.epicIds && app.epicIds.split(",")[0] !=="")
-                    app.queryEpicFeatures();
-                else
-                    app.queryFeatures();
+                var includeDefects = app.includeDefects();
+
+                if ((includeDefects && app.defectSnapshots) || (!includeDefects && app.featureSnapshots)) {
+                    app.createAndShowBurndownChart();
+
+                } else {
+                    if (app.epicIds && app.epicIds.split(",")[0] !== "")
+                        app.queryEpicFeatures();
+                    else
+                        app.queryFeatures();
+                }
 
             });
         });
@@ -303,8 +307,8 @@ Ext.define('CustomApp', {
     },
 
     resetData: function() {
-        delete app.defectSnapshots;
-        delete app.featureSnapshots;
+        delete this.defectSnapshots;
+        delete this.featureSnapshots;
     },
 
     resetChart: function(mesg) {
@@ -439,14 +443,13 @@ Ext.define('CustomApp', {
             }
         };
 
-        app.resetData();
-
-        Ext.create('Rally.data.lookback.SnapshotStore', storeConfig);
-
+        if (this.featureSnapshots == null) {
+            console.log("Querying for feature snapshots");
+            Ext.create('Rally.data.lookback.SnapshotStore', storeConfig);
+        }
         if (this.includeDefects()) {
+            console.log("Querying for defects snapshots");
             Ext.create('Rally.data.lookback.SnapshotStore', defectStoreConfig);
-        } else {
-            app.defectSnapshots = [];
         }
     },
 
@@ -474,12 +477,16 @@ Ext.define('CustomApp', {
             app.featureSnapshots = snapshots;
         }
 
-        if (app.defectSnapshots && app.featureSnapshots) {
-            app.createChartData(app.featureSnapshots.concat(app.defectSnapshots));
+        // Make sure we have all the data needed before creating the chart
+        if ((!app.includeDefects() || app.defectSnapshots) && app.featureSnapshots) {
+            app.createAndShowBurndownChart();
         }
     },
 
-    createChartData : function ( snapshots ) {
+    createAndShowBurndownChart : function () {
+        var snapshots = this.includeDefects() && app.defectSnapshots
+                        	? app.featureSnapshots.concat(app.defectSnapshots)
+                            : app.featureSnapshots;
         var lumenize	 = window.parent.Rally.data.lookback.Lumenize;
         var snapShotData = _.map(snapshots,function(d){return d.data;});
         var extent		 = app.getReleaseExtent(app.releases);
@@ -511,7 +518,6 @@ Ext.define('CustomApp', {
         var upToDateISOString = new lumenize.Time(extent.end).getISOStringInTZ(config.tz);
         // create the calculator and add snapshots to it.
         calculator = new lumenize.TimeSeriesCalculator(config);
-console.log('snapshot', snapShotData);
         calculator.addSnapshots(snapShotData, startOnISOString, upToDateISOString);
 
         // create a high charts series config object, used to get the hc series data
