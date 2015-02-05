@@ -54,15 +54,23 @@ Ext.define('CustomApp', {
                 handler: function(checkbox, showLabels) {
                     app.createChart();
                 }
-            }]
+/*            }, {
+                xtype: 'label',
+                labelAlign: 'right',
+                itemId: 'defectPoints',
+                text: 'Defect Points: ',
+                padding: 3,
+                margin: 10
+            }, {
+                xtype: 'label',
+                labelAlign: 'right',
+                itemId: 'totalPoints',
+                text: 'Total Points: ',
+                padding: 3,
+                margin: 10
+ */           }]
         }
     ],
-
-    setLoading: function(value) {
-        var topPanel = this.down('#topPanel');
-
-        topPanel.setLoading(value);
-    },
 
     includeDefects: function() {
         var checkbox = this.down('#includeDefects');
@@ -83,24 +91,14 @@ Ext.define('CustomApp', {
 
     // switch to app configuration from ui selection
     config: {
-
         defaultSettings : {
             releases                : "",
             epicIds                 : "",
             ignoreZeroValues        : true,
-            PreliminaryEstimate     : false,
             StoryPoints             : true,
-            StoryCount              : false,
             StoryPointsProjection   : true,
-            StoryCountProjection    : false,
             AcceptedStoryPoints     : true,
-            AcceptedStoryCount      : false,
-            AcceptedPointsProjection: true,
-            AcceptedCountProjection : false,
-            FeatureCount            : false,
-            FeatureCountCompleted   : false,
-            HistoricalProjection    : false,
-            RefinedEstimate : false
+            AcceptedPointsProjection: true
         }
 
     },
@@ -151,7 +149,6 @@ Ext.define('CustomApp', {
             return;
         }
 
-        var that = this;
         // get the project id.
         this.project = this.getContext().getProject().ObjectID;
 
@@ -218,13 +215,18 @@ Ext.define('CustomApp', {
                 var includeDefects = app.includeDefects();
 
                 if ((includeDefects && app.defectSnapshots) || (!includeDefects && app.featureSnapshots)) {
-                    app.createChartData();
+                    app.createAndShowBurnupChart();
 
                 } else {
+                    app.queryFeatureSnapshots();
+
+                    /* If we are not going to limit to particular ids, then this query is not necessary:
+                     * we can just query for all PI's associated with a release
                     if (app.epicIds && app.epicIds.split(",")[0] !== "")
                         app.queryEpicFeatures();
                     else
                         app.queryFeatures();
+                     */
                 }
 
             });
@@ -396,11 +398,13 @@ Ext.define('CustomApp', {
         // var pes = _.pluck(app.features, function(feature) { return feature.get("PreliminaryEstimate");} );
         var extent = app.getReleaseExtent(app.releases);
         // console.log("ids",ids,pes);
+        var relIDs = _.map(app.releases, function (release) { return release.data.ObjectID; });
 
         var storeConfig = {
             find : {
-                // '_TypeHierarchy' : { "$in" : ["PortfolioItem/PIFTeam"] },
-                'ObjectID' : { "$in" : ids },
+//                'ObjectID' : { "$in" : ids },
+                '_TypeHierarchy' : { "$in" : ["PortfolioItem/Feature"] },
+                'Release': { "$in" : relIDs },
                 '_ValidTo' : { "$gte" : extent.isoStart }
             },
             autoLoad : true,
@@ -412,7 +416,6 @@ Ext.define('CustomApp', {
 
         console.log('releases', _.map(app.releases, function (release) { return release.data.ObjectID; }));
 
-        var relIDs = _.map(app.releases, function (release) { return release.data.ObjectID; });
         var defectStoreConfig = {
             find: {
                 '_TypeHierarchy': { "$in" : ["Defect"] },
@@ -479,11 +482,11 @@ Ext.define('CustomApp', {
 
         // Make sure we have all the data needed before drawing the graph
         if ((!app.includeDefects() || app.defectSnapshots) && app.featureSnapshots) {
-            app.createChartData();
+            app.createAndShowBurnupChart();
         }
     },
 
-    createChartData : function () {
+    createAndShowBurnupChart : function () {
         var snapshots    = this.includeDefects() && app.defectSnapshots ?
                             app.featureSnapshots.concat(app.defectSnapshots) : app.featureSnapshots;
         var lumenize     = window.parent.Rally.data.lookback.Lumenize;
@@ -528,7 +531,8 @@ Ext.define('CustomApp', {
                 });
             }
         });
-        var hc = lumenize.arrayOfMaps_To_HighChartsSeries(calculator.getResults().seriesData, hcConfig);
+        var seriesData = calculator.getResults().seriesData;
+        var hc = lumenize.arrayOfMaps_To_HighChartsSeries(seriesData, hcConfig);
 
         this.showChart( trimHighChartsConfig(hc) );
     },
@@ -728,7 +732,7 @@ Ext.define('CustomApp', {
                 id: 'highchartBurndown',
                 chart: { },
                 title: {
-                    text: 'Release Burnup by PI Feature',
+                    text: 'Release Burnup',
                     x: -20 //center
                 },
                 plotOptions: {
@@ -764,22 +768,32 @@ Ext.define('CustomApp', {
                 legend: { align: 'center', verticalAlign: 'bottom' }
             }
         });
-        this.add(extChart);
 
-        app.clearLoading();
+        this.add(extChart);
+        app.clearLoadingBug();
     },
 
+    //
     // Even though we don't seem to set it explicitly, the chart is left with
-    // the loading mask on.  This hack turns it off on most browsers.
-    clearLoading: function() {
+    // the loading mask on.  This hack turns it off in FireFox and Explorer.
+    //
+    clearLoadingBug: function() {
         chart = this.down("#chart1");
 
-        var p = Ext.get(chart.id);
-        elems = p.query("div.x-mask");
+        var p = Ext.get(this.id);
+        var elems = p.query("div.x-mask").concat(p.query("div.x-mask-msg"));
 
-        _.each(elems, function(e) { e.remove(); });
-        var elems = p.query("div.x-mask-msg");
-        _.each(elems, function(e) { e.remove(); });
+        _.each(elems, function(e) {
+            console.log('element', e);
+            if (typeof e.remove === 'function') {
+                e.remove();
+            } else if (typeof e.removeNode === 'function') {
+                while (e.firstChild) {
+                    e.removeChild(e.firstChild);
+                }
+                e.removeNode();
+            }
+        });
     }
 
 });

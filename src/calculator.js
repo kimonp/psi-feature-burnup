@@ -19,10 +19,10 @@ Ext.define("MyBurnCalculator", function() {
             return this;
         },
 
-        pointsOffset : [],
-        countOffset : [],
-        data : [],
-        indexOffset : [],
+        pointsOffset: [],
+        countOffset: [],
+        data: [],
+        indexOffset: [],
 
         getMetrics: function () {
 

@@ -13,9 +13,9 @@ function getReleaseTimeBox(app) {
     return tbName;
 }
 
-// generic function to perform a web services query    
+// generic function to perform a web services query
 function wsapiQuery( config , callback ) {
-	
+
     Ext.create('Rally.data.WsapiDataStore', {
         autoLoad : true,
         limit : "Infinity",
@@ -58,19 +58,10 @@ function pointsUnitType(type) {
 
 function createSeriesArray() {
     return [
-        { name : "PreliminaryEstimate",      description : "Preliminary Estimate",  field : "CalcPreliminaryEstimate",    display : "line", f : "sum", color : "Orange" },
         { name : "StoryPoints" ,             description : "Story Points",          field : "LeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "DarkGray" },
-        { name : "StoryCount"  ,             description : "Story Count" ,          field : "LeafStoryCount",             display : "line", f : "sum", color : "DarkGray" },
         { name : "StoryPointsProjection",    description : "Scope Projection",  projectOn : "Story Points", color : "LightGray" },
-        { name : "StoryCountProjection",     description : "Count Projection",  projectOn : "Story Count",  color : "LightGray" },
         { name : "AcceptedStoryPoints",      description : "Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "Green" },
-        { name : "AcceptedStoryCount",       description : "Accepted Count",        field : "AcceptedLeafStoryCount",  display : "line", f : "sum", color : "Green" },
-        { name : "AcceptedPointsProjection", description : "Accepted Projection", projectOn : "Accepted Points",        color : "LightGray" },
-        { name : "AcceptedCountProjection",  description : "Accepted Count Projection", projectOn : "Accepted Count",   color : "LightGray" },
-        { name : "FeatureCount",             description : "Feature Count",          field : "ObjectID",                display : "column", f : "count", color : "Blue" },
-        { name : "FeatureCountCompleted",    description : "Completed Feature Count",field : "Completed",               display : "column", f : "sum", color : "Green" },
-        { name : "HistoricalProjection",     description : "Historical Trend Projection",projectOn : "Accepted Points", color : "LightGray", hidden : true, projectFrom : "mid" },
-        { name : "RefinedEstimate" ,         description : "Refined Feature Estimate", field : "RefinedEstimate", display : "line", f : "sum", color : "DarkBlue" }
+        { name : "AcceptedPointsProjection", description : "Accepted Projection", projectOn : "Accepted Points",        color : "LightGray" }
     ];
 }
 
@@ -84,11 +75,11 @@ function createColorsArray( series ) {
                 return a.description === s.name;
             });
             if (!_.isUndefined(as)) {
-                colors.push(as.color);    
+                colors.push(as.color);
             } else {
                 colors.push("LightGray");
             }
-            
+
         }
     });
 
