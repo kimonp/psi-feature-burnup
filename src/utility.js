@@ -102,7 +102,7 @@ function trimHighChartsConfig(hc) {
         }
         // for projection null values before today.
         if (series.name.indexOf("Projection")!==-1) {
-            console.log("projection series",series);
+//            console.log("projection series",series);
             _.each( series.data, function( point , x ){
                 if ( Date.parse(hc[0].data[x]) < today ) {
                     series.data[x] = null;

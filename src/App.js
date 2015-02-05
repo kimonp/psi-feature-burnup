@@ -1,7 +1,4 @@
-var acceptedPointsData = [];
-var acceptedCountData = [];
 var app = null;
-var showAssignedProgram = true;
 
 Ext.define('CustomApp', {
     scopeType: 'release',
@@ -160,10 +157,6 @@ Ext.define('CustomApp', {
         var configs = [];
 
         // query for estimate values, releases and iterations.
-        configs.push({ model : "PreliminaryEstimate",
-                       fetch : ['Name','ObjectID','Value'],
-                       filters : []
-        });
         configs.push({ model : "Release",
                        fetch : ['Name', 'ObjectID', 'Project', 'ReleaseStartDate', 'ReleaseDate' ],
                        filters: [app.createReleaseFilter(app.configReleases)]
@@ -188,12 +181,11 @@ Ext.define('CustomApp', {
         // get the preliminary estimate type values, and the releases.
         async.map( configs, app.wsapiQuery, function(err,results) {
 
-            app.peRecords   = results[0];
-            app.releases    = results[1];
-            app.featureType = results[2][0].get("TypePath");
-            app.milestones  = results[3];
+            app.releases    = results[0];
+            app.featureType = results[1][0].get("TypePath");
+            app.milestones  = results[2];
 
-            if (app.releases.length===0) {
+            if (app.releases.length === 0) {
                 app.resetChart("No Releases found with this name: " + app.configReleases);
 
                 return;
@@ -329,6 +321,7 @@ Ext.define('CustomApp', {
         }
     },
 
+    // No longer used
     executeFeatureQuery: function(filter) {
         return Ext.create('Rally.data.WsapiDataStore', {
             autoLoad: true,
@@ -353,6 +346,7 @@ Ext.define('CustomApp', {
         });
     },
 
+    // No longer used
     queryEpicFeatures : function() {
         var filter = null;
         var epicIds = app.epicIds.split(",");
@@ -403,7 +397,7 @@ Ext.define('CustomApp', {
         var storeConfig = {
             find : {
 //                'ObjectID' : { "$in" : ids },
-                '_TypeHierarchy' : { "$in" : ["PortfolioItem/Feature"] },
+                '_TypeHierarchy' : { "$in" : [app.featureType] },
                 'Release': { "$in" : relIDs },
                 '_ValidTo' : { "$gte" : extent.isoStart }
             },
@@ -590,7 +584,7 @@ Ext.define('CustomApp', {
     // which is pretty close.  So we will display that in the color of the milestone.
     //
     getPlotLineConfigs: function(seriesDates, recordArray, dateField, plotLineStyle) {
-        var plotLineCount = 0;
+        var plotLineCount = 1;
 
         var plotLineConfigs = _.map(recordArray, function(record){
             var d = new Date(Date.parse(record.raw[dateField])).toISOString().split("T")[0];
@@ -612,7 +606,7 @@ Ext.define('CustomApp', {
 
                 if (plotLineStyle.showLabelTitles) {
                     text += labelTitle;
-                    yLabelOffset = (plotLineCount % 2) * 15; // Lower ever other label (via mod 2)
+                    yLabelOffset = (plotLineCount % 2) ? 10 : -5; // Lower ever other label (via mod 2)
                 }
 
                 plotLineConfig.label = {
@@ -732,7 +726,7 @@ Ext.define('CustomApp', {
                 id: 'highchartBurndown',
                 chart: { },
                 title: {
-                    text: 'Release Burnup',
+                    text: ' ', // Leave it blank...could be "Release Burnup", or the name of the project/release
                     x: -20 //center
                 },
                 plotOptions: {
@@ -778,15 +772,14 @@ Ext.define('CustomApp', {
     // the loading mask on.  This hack turns it off in FireFox and Explorer.
     //
     clearLoadingBug: function() {
-        chart = this.down("#chart1");
-
+//      chart = this.down("#chart1");
         var p = Ext.get(this.id);
         var elems = p.query("div.x-mask").concat(p.query("div.x-mask-msg"));
 
         _.each(elems, function(e) {
-            console.log('element', e);
             if (typeof e.remove === 'function') {
                 e.remove();
+
             } else if (typeof e.removeNode === 'function') {
                 while (e.firstChild) {
                     e.removeChild(e.firstChild);

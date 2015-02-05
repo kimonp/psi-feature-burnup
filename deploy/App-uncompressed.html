@@ -22,61 +22,94 @@ Ext.define('CustomApp', {
 
     items: [
         {
-            xtype: 'rallyreleasecombobox',
-            fieldLabel: 'Release',
-            labelAlign: 'right',
-            width: 300,
-            itemId: 'rallyRelease',
-            listeners: {
-                ready: function () {
-                    console.log('ready');
-                    var app = this.up('#burnupApp');
-                    
-                    app.setSelectedRelease(this);
-                },
-                select: function () {
-                    var app = this.up('#burnupApp');
-                    app.setSelectedRelease(this);
+            xtype: 'panel',
+            itemId: 'topPanel',
+            layout: { type: 'hbox', align: 'left' },
+
+            items: [{
+                xtype: 'rallyreleasecombobox',
+                fieldLabel: 'Release:',
+                labelAlign: 'right',
+                margin: 8,
+                width: 300,
+                itemId: 'releaseCombo',
+                listeners: {
+                    ready: function () {
+                        var app = this.up('#burnupApp');
+
+                        app.setSelectedRelease(this);  // This is scoped to the the combobox object
+                    },
+                    select: function () {
+                        var app = this.up('#burnupApp');
+
+                        app.setSelectedRelease(this);  // This is scoped to the the combobox object
+                    }
                 }
-            }
+            }, {
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Milestone Titles',
+                labelAlign: 'right',
+                margin: 8,
+                value: true,
+                handler: function(checkbox, showLabels) {
+                    app.removeAllMilestonePlotLines();
+                    app.addMilestonePlotLines(showLabels);
+                }
+            }, {
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Include Defects',
+                labelAlign: 'right',
+                margin: 8,
+                value: false,
+                itemId: 'includeDefects',
+                handler: function(checkbox, showLabels) {
+                    app.createChart();
+                }
+/*            }, {
+                xtype: 'label',
+                labelAlign: 'right',
+                itemId: 'defectPoints',
+                text: 'Defect Points: ',
+                padding: 3,
+                margin: 10
+            }, {
+                xtype: 'label',
+                labelAlign: 'right',
+                itemId: 'totalPoints',
+                text: 'Total Points: ',
+                padding: 3,
+                margin: 10
+ */           }]
         }
     ],
-    
-    // Called when the release combo box is ready or selected.  This triggers the bulding of the chart.
-    setSelectedRelease: function(releaseCombo) {
-        releaseCombo.setLoading(true);
-        
-        var releaseName = releaseCombo.getRecord().data.Name;
 
+    includeDefects: function() {
+        var checkbox = this.down('#includeDefects');
+
+        return checkbox.value;
+    },
+
+    // Called when the release combo box is ready or selected.  This triggers the building of the chart.
+    setSelectedRelease: function(releaseCombo) {
+        var releaseName = releaseCombo.getRecord().data.Name;
         this.defaultRelease = releaseName;
+
+        this.resetData();
         this.createChart();
     },
-    
-    
-    launch: function() {
-        app = this;
-    },
-    
+
+//  launch: function() { }, // No launch function currently needed: createChart is triggered when a release is ready or selected
+
     // switch to app configuration from ui selection
     config: {
-
         defaultSettings : {
             releases                : "",
             epicIds                 : "",
             ignoreZeroValues        : true,
-            PreliminaryEstimate     : false,
             StoryPoints             : true,
-            StoryCount              : false,
             StoryPointsProjection   : true,
-            StoryCountProjection    : false,
             AcceptedStoryPoints     : true,
-            AcceptedStoryCount      : false,
-            AcceptedPointsProjection: true,
-            AcceptedCountProjection : false,
-            FeatureCount            : false,
-            FeatureCountCompleted   : false,
-            HistoricalProjection    : false,
-            RefinedEstimate : false
+            AcceptedPointsProjection: true
         }
 
     },
@@ -92,14 +125,11 @@ Ext.define('CustomApp', {
                 name: 'releases',
                 xtype: 'rallytextfield',
                 label : "Release names to be included (comma seperated)"
-            },
-            {
+            }, {
                 name: 'epicIds',
                 xtype: 'rallytextfield',
                 label : "(Optional) List of Parent PortfolioItem (Epics) ids to filter Features by"
-            },
-
-            {
+            }, {
                 name: 'ignoreZeroValues',
                 xtype: 'rallycheckboxfield',
                 label: 'For projection ignore zero values'
@@ -118,18 +148,18 @@ Ext.define('CustomApp', {
         if (!app) {
             app = this;
         }
-        
-        app.series = createSeriesArray();
-        app.configReleases = app.getSetting("releases") || app.defaultRelease;
-        app.ignoreZeroValues = app.getSetting("ignoreZeroValues");
-        app.epicIds = app.getSetting("epicIds");
+        app.setLoading(true);
 
-        if (app.configReleases==="") {
-            this.add({html:"Please Configure this app by selecting Edit App Settings from Configure (gear) Menu"});
+        app.series           = createSeriesArray();
+        app.configReleases   = app.getSetting("releases") || app.defaultRelease;
+        app.ignoreZeroValues = app.getSetting("ignoreZeroValues");
+        app.epicIds          = app.getSetting("epicIds");
+
+        if (app.configReleases === "") {
+            this.resetChart("Please Configure this app by selecting Edit App Settings from Configure (gear) Menu");
             return;
         }
 
-        var that = this;
         // get the project id.
         this.project = this.getContext().getProject().ObjectID;
 
@@ -139,14 +169,14 @@ Ext.define('CustomApp', {
         app.configReleases = tbName !== "" ? tbName : app.configReleases;
 
         var configs = [];
-        
+
         // query for estimate values, releases and iterations.
-        configs.push({ model : "PreliminaryEstimate", 
-                       fetch : ['Name','ObjectID','Value'], 
-                       filters : [] 
+        configs.push({ model : "PreliminaryEstimate",
+                       fetch : ['Name','ObjectID','Value'],
+                       filters : []
         });
-        configs.push({ model : "Release",             
-                       fetch : ['Name', 'ObjectID', 'Project', 'ReleaseStartDate', 'ReleaseDate' ], 
+        configs.push({ model : "Release",
+                       fetch : ['Name', 'ObjectID', 'Project', 'ReleaseStartDate', 'ReleaseDate' ],
                        filters: [app.createReleaseFilter(app.configReleases)]
         });
         configs.push({ model : "TypeDefinition",
@@ -158,7 +188,7 @@ Ext.define('CustomApp', {
                        filters : [
                                 Ext.create('Rally.data.QueryFilter', { property:'Projects', operator: 'contains', value:'project/' + this.project }).or(
                                 Ext.create('Rally.data.QueryFilter', { property:'TargetProject', operator: '=', value: null })).and(
-                                    Ext.create('Rally.data.QueryFilter', { property:'TargetDate', operator: '!=', value: null }))
+                                Ext.create('Rally.data.QueryFilter', { property:'TargetDate', operator: '!=', value: null }))
                        ],
                        sorters: [{
                            property: 'TargetDate',
@@ -173,10 +203,10 @@ Ext.define('CustomApp', {
             app.releases    = results[1];
             app.featureType = results[2][0].get("TypePath");
             app.milestones  = results[3];
-            
+
             if (app.releases.length===0) {
-                app.resetChart("No Releases found with this name: "+app.configReleases);
-                
+                app.resetChart("No Releases found with this name: " + app.configReleases);
+
                 return;
             }
 
@@ -193,10 +223,22 @@ Ext.define('CustomApp', {
 
                 app.iterations = results[0];
 
-                if (app.epicIds && app.epicIds.split(",")[0] !=="")
-                    app.queryEpicFeatures();
-                else
-                    app.queryFeatures();
+                var includeDefects = app.includeDefects();
+
+                if ((includeDefects && app.defectSnapshots) || (!includeDefects && app.featureSnapshots)) {
+                    app.createAndShowBurnupChart();
+
+                } else {
+                    app.queryFeatureSnapshots();
+
+                    /* If we are not going to limit to particular ids, then this query is not necessary:
+                     * we can just query for all PI's associated with a release
+                    if (app.epicIds && app.epicIds.split(",")[0] !== "")
+                        app.queryEpicFeatures();
+                    else
+                        app.queryFeatures();
+                     */
+                }
 
             });
         });
@@ -226,6 +268,9 @@ Ext.define('CustomApp', {
 
     },
 
+    // Given several releases, find the earliest starting date and latest ending date of all of them
+    // Then create a filter that matches any iterations whose end date is >= the earliest release starting date
+    // and <= the latest release ending date
     createIterationFilter : function(releases) {
 
         var extent = app.getReleaseExtent(releases);
@@ -242,6 +287,7 @@ Ext.define('CustomApp', {
         return filter;
     },
 
+    // Given several releases, find the earliest starting date and latest ending date of all of them
     getReleaseExtent : function( releases ) {
 
         var start = _.min(_.pluck(releases,function(r) { return r.get("ReleaseStartDate");}));
@@ -253,7 +299,7 @@ Ext.define('CustomApp', {
 
     },
 
-    // generic function to perform a web services query    
+    // generic function to perform a web services query
     wsapiQuery : function( config , callback ) {
 
         Ext.create('Rally.data.WsapiDataStore', {
@@ -273,45 +319,49 @@ Ext.define('CustomApp', {
 
     },
 
+    resetData: function() {
+        delete this.defectSnapshots;
+        delete this.featureSnapshots;
+    },
+
     resetChart: function(mesg) {
-        var releaseCombo = app.down('#rallyRelease');
-        
-        releaseCombo.setLoading(false);
-        
+        app.setLoading(false);
+
         var chart = app.down("#chart1");
+
         if (chart !== null) {
             chart.removeAll();
         }
-            
+
         if (mesg) {
             Rally.ui.notify.Notifier.show({message: mesg, color: 'red'});
         } else {
             Rally.ui.notify.Notifier.hide();
         }
     },
-    
+
     executeFeatureQuery: function(filter) {
         return Ext.create('Rally.data.WsapiDataStore', {
             autoLoad: true,
             model : app.featureType,
             limit : 'Infinity',
-            fetch: ['ObjectID','FormattedID' ],
+            fetch: ['ObjectID', 'FormattedID'],
             filters: [filter],
             listeners: {
                 load: function(store, features) {
                     console.log("Loaded:"+features.length," Features.");
-        
+
                     app.features = features;
-        
+
                     if (app.features.length === 0) {
                         app.resetChart('No features found for this release');
-                        
+
                     } else {
                         app.queryFeatureSnapshots();
                     }
                 }
             }
-        });        
+        });
     },
 
     queryEpicFeatures : function() {
@@ -320,7 +370,7 @@ Ext.define('CustomApp', {
 
         if (epicIds.length === 0) {
             app.resetChart("No epic id's specified");
-            
+
             return;
         }
 
@@ -335,11 +385,11 @@ Ext.define('CustomApp', {
 
         app.executeFeatureQuery(filter);
     },
-    
+
     queryFeatures : function() {
         var filter = null;
         var releaseNames = _.uniq(_.map(app.releases,function(r){ return r.get("Name");}));
-        
+
         console.log("releaseNames", releaseNames);
 
         _.each( releaseNames , function( release, i ) {
@@ -353,46 +403,107 @@ Ext.define('CustomApp', {
 
         app.executeFeatureQuery(filter);
     },
-    
-    queryFeatureSnapshots : function () {
 
+    queryFeatureSnapshots : function () {
         var ids = _.pluck(app.features, function(feature) { return feature.get("ObjectID");} );
         // var pes = _.pluck(app.features, function(feature) { return feature.get("PreliminaryEstimate");} );
         var extent = app.getReleaseExtent(app.releases);
         // console.log("ids",ids,pes);
+        var relIDs = _.map(app.releases, function (release) { return release.data.ObjectID; });
 
         var storeConfig = {
             find : {
-                // '_TypeHierarchy' : { "$in" : ["PortfolioItem/PIFTeam"] },
-                'ObjectID' : { "$in" : ids },
+//                'ObjectID' : { "$in" : ids },
+                '_TypeHierarchy' : { "$in" : ["PortfolioItem/Feature"] },
+                'Release': { "$in" : relIDs },
                 '_ValidTo' : { "$gte" : extent.isoStart }
             },
             autoLoad : true,
             pageSize:1000,
             limit: 'Infinity',
-            fetch: ['_UnformattedID','ObjectID','_TypeHierarchy','PreliminaryEstimate', 'LeafStoryCount','LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal','AcceptedLeafStoryCount','PercentDoneByStoryCount','RefinedEstimate'],
-            hydrate: ['_TypeHierarchy']
+//            fetch: ['_UnformattedID','ObjectID','_TypeHierarchy','PreliminaryEstimate', 'LeafStoryCount','LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal','AcceptedLeafStoryCount','PercentDoneByStoryCount','RefinedEstimate']
+            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal']
+        };
+
+        console.log('releases', _.map(app.releases, function (release) { return release.data.ObjectID; }));
+
+        var defectStoreConfig = {
+            find: {
+                '_TypeHierarchy': { "$in" : ["Defect"] },
+                'Release': { "$in" : relIDs },
+                'PlanEstimate': { "$gt" : 0 },
+                '_ValidTo': { "$gte" : extent.isoStart }
+            },
+            autoLoad : true,
+            pageSize: 1000,
+            limit: 'Infinity',
+            fetch: ['PlanEstimate', 'ScheduleState'],
+            hydrate: ['ScheduleState'],
+            listeners: {
+                load: function(store, snapshots, success) {
+                console.log("Loaded:"+snapshots.length," Defects snapshots");
+
+                    app.gotSnapshotData('defects', snapshots);
+                }
+            }
         };
 
         storeConfig.listeners = {
             scope : this,
             load: function(store, snapshots, success) {
-                console.log("Loaded:"+snapshots.length," Snapshots.");
-                app.createChartData(snapshots);
+                console.log("Loaded:"+snapshots.length," Feature Snapshots.");
+
+                app.gotSnapshotData('features', snapshots);
             }
         };
 
-        var snapshotStore = Ext.create('Rally.data.lookback.SnapshotStore', storeConfig);
+        if (!this.featureSnapshots) {
+            console.log("Querying for feature snapshots");
+            Ext.create('Rally.data.lookback.SnapshotStore', storeConfig);
+        }
+        if (this.includeDefects()) {
+            console.log("Querying for defects snapshots");
+            Ext.create('Rally.data.lookback.SnapshotStore', defectStoreConfig);
+        }
     },
 
-    createChartData : function ( snapshots ) {
-        
-        var that = this;
-        var lumenize = window.parent.Rally.data.lookback.Lumenize;
-        var snapShotData = _.map(snapshots,function(d){return d.data;});
-        var extent = app.getReleaseExtent(app.releases);
+    //
+    // Make defectsSnapshots look like feature Snapshots by populating "Total" fields
+    // that our found in feature level portfolio items
+    //
+    normalizeDefectSnapshotData: function(defectSnapshots) {
 
-        var snaps = _.sortBy(snapShotData,"_UnformattedID");
+        _(defectSnapshots).forEach(function(defect) {
+            defect.data.LeafStoryPlanEstimateTotal = defect.data.PlanEstimate;
+
+            defect.data.AcceptedLeafStoryPlanEstimateTotal =
+                defect.data.ScheduleState === 'Accepted' ? defect.data.PlanEstimate : 0;
+        });
+
+        return defectSnapshots;
+    },
+
+    gotSnapshotData: function(type, snapshots) {
+        if (type == 'defects') {
+            app.defectSnapshots = app.normalizeDefectSnapshotData(snapshots);
+
+        } else if (type == 'features') {
+            app.featureSnapshots = snapshots;
+        }
+
+        // Make sure we have all the data needed before drawing the graph
+        if ((!app.includeDefects() || app.defectSnapshots) && app.featureSnapshots) {
+            app.createAndShowBurnupChart();
+        }
+    },
+
+    createAndShowBurnupChart : function () {
+        var snapshots    = this.includeDefects() && app.defectSnapshots ?
+                            app.featureSnapshots.concat(app.defectSnapshots) : app.featureSnapshots;
+        var lumenize     = window.parent.Rally.data.lookback.Lumenize;
+        var snapShotData = _.map(snapshots,function(d){return d.data;});
+        var extent       = app.getReleaseExtent(app.releases);
+
         // can be used to 'knockout' holidays
         var holidays = [
             //{year: 2014, month: 1, day: 1}  // Made up holiday to test knockout
@@ -421,7 +532,7 @@ Ext.define('CustomApp', {
         // create the calculator and add snapshots to it.
         calculator = new lumenize.TimeSeriesCalculator(config);
         calculator.addSnapshots(snapShotData, startOnISOString, upToDateISOString);
-        
+
         // create a high charts series config object, used to get the hc series data
         var hcConfig = [{ name : "label" }];
         _.each( app.series, function(s) {
@@ -431,100 +542,190 @@ Ext.define('CustomApp', {
                 });
             }
         });
-        var hc = lumenize.arrayOfMaps_To_HighChartsSeries(calculator.getResults().seriesData, hcConfig);
+        var seriesData = calculator.getResults().seriesData;
+        var hc = lumenize.arrayOfMaps_To_HighChartsSeries(seriesData, hcConfig);
+
         this.showChart( trimHighChartsConfig(hc) );
     },
-    
-    parsePlotLines: function(seriesData, recordArray, dateField, plotLineStyle) {
-        var yLabelOffset = 0;
-        
-        var plotlines = _.map(recordArray, function(record){
+
+    getChartXAxis: function() {
+        var chart = app.down("highchart").chart;
+        var xAxisArray = chart.xAxis;
+
+        return xAxisArray[0];
+    },
+
+    removeAllMilestonePlotLines: function() {
+        var xAxis		= this.getChartXAxis();
+        var plotLines	= xAxis.plotLinesAndBands;
+        var ids			= [];
+            _(plotLines).forEach(function(plotLine) {
+                if (plotLine && plotLine.id) {
+                    ids.push(plotLine.id);
+                }
+            });
+
+        _(ids).forEach(function(id) {
+            xAxis.removePlotLine(id);
+        });
+    },
+
+    addMilestonePlotLines: function(showLabelTitles) {
+        var xAxis		= this.getChartXAxis();
+        var miPlotLines = this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles);
+
+        _(miPlotLines).forEach(function(plotLine) {
+            xAxis.addPlotLine(plotLine);
+        });
+    },
+
+    //
+    // Return an array of plotlines.
+    //
+    //   seriesDates: An array of all the dates that will be displayed in the graph
+    //   recordArray: An array of the record type we want to create plot lines for (release, iteration or milestone)
+    //     dateField: The name of the field that accesses the "date" field for records in recordArray
+    // plotLineStyle: Style of the plot line to be passed to highcharts.  Also contains several special fields that we interpret here
+    //
+    //                 showLabel: Label the plotline as the name of the record it represents (e.g. Milestone Name)
+    //                 canRemove: Plot line can be removed (temporarily) by clicking on it
+    //                     color: Enter an explit color, otherwise it will try to lookup the DisplayColor of the object (works for Milestones),
+    //                            else it will default to grey
+    //
+    // showLabel notes:
+    //
+    // We want to display milestone plotLines similar to how they are displayed in the "Portfolio -> Timeline" page in Rally.
+    // Those are just a dotted line with diamond at the top colored to match the color of the milestone.
+    //
+    // We could not find a way to display a diamond, but the character "8" in the Rally font is a downward pointing triangle/arrow
+    // which is pretty close.  So we will display that in the color of the milestone.
+    //
+    getPlotLineConfigs: function(seriesDates, recordArray, dateField, plotLineStyle) {
+        var plotLineCount = 0;
+
+        var plotLineConfigs = _.map(recordArray, function(record){
             var d = new Date(Date.parse(record.raw[dateField])).toISOString().split("T")[0];
-            
+
             var color = plotLineStyle.color || record.get("DisplayColor") || "grey";
-            var labelHTML = '<span style="font-family:Rally;color:' + color + '">8</span>';
-            var hoverText = record.get("Name");
-            
-            var plotLine = {
+            var labelHTML = '<span style="font-family:Rally;color:' + color + '">8</span>'; // 8 is a downward pointing triangle in the Rally font
+            var labelTitle = record.get("Name");
+
+            var plotLineConfig = {
                 dashStyle: "Dot",
                 color: color,
                 width: 1,
-                value: _.indexOf(seriesData,d)
+                value: _.indexOf(seriesDates,d)
             };
-            
+
             if (plotLineStyle.showLabel) {
-                plotLine.label = {
-                    text: labelHTML + hoverText,
+                var text = labelHTML;
+                var yLabelOffset = 0;
+
+                if (plotLineStyle.showLabelTitles) {
+                    text += labelTitle;
+                    yLabelOffset = (plotLineCount % 2) * 15; // Lower ever other label (via mod 2)
+                }
+
+                plotLineConfig.label = {
+                    text: text,
                     rotation: 0,
                     verticalAlign: 'top',
-                    y: yLabelOffset % 2*15,
+                    y: yLabelOffset,
                     x: -6,
                     textAlign: 'left',
                     useHTML: true
                 };
-                
-                yLabelOffset++;
+                plotLineCount++;
             }
-            
+
             if (plotLineStyle.canRemove) {
-                var id = 'milestone-' + record.get("Name");
-                
-                plotLine.id = id;
-                plotLine.events = {
-                    click: function (e) {
-                        var plotLineId = this.id;
-                        var axis       = this.axis;
+                var name       = record.get("Name");
+                var plotLineId = 'milestone-' + name;
+
+                plotLineConfig.id = plotLineId;
+
+                plotLineConfig.events = {
+                    click: function () {
+                        var axis        = this.axis;
+
                         axis.removePlotLine(plotLineId);
-                    },
+                    }/*,
+
                     mouseover: function () {
-                        console.log('mouseover');
-                        // var plotline = this;
-                        // plotline.label.text = labelHTML + hoverText;
-                        // plotline.axis.update();
+                        var axis        = this.axis;
+                        var newPlotLine	= _.clone(plotLineConfig);
+                        var oldLabel	= _.clone(this.label);
+                        var labelRE		= new RegExp(labelText);
+
+                        if (this.label.text.match(labelRE)) {
+                            newPlotLine.label.text = labelHTML;
+
+                        } else {
+                            newPlotLine.label.text = labelHTML + labelText;
+                        }
+
+                        axis.removePlotLine(plotLineId);
+                        axis.addPlotLine(newPlotLine);
                     },
                     mouseout: function () {
-                        console.log('mouseout');
-                        // var plotline = this;
-                        // plotline.label.text = labelHTML;
-                        // plotline.axis.update();
-                    }
+                    }*/
                 };
             }
-            
+
             _.each(plotLineStyle, function(value, key) {
-                plotLine[key] = value;
+                plotLineConfig[key] = value;
             }, this);
-            
-            
-            return plotLine;
+
+
+            return plotLineConfig;
         });
-        return plotlines;
+        return plotLineConfigs;
     },
 
-    createPlotLines: function(seriesData) {
-        var app = this;
-        
+    getMilestonePlotLineConfigs: function(seriesDates, showLabelTitles) {
+        var plotLineStyle	= { dashStyle: 'dash', width: 2, showLabel: true, showLabelTitles: showLabelTitles, canRemove: true };
+
+        return this.getPlotLineConfigs(seriesDates, this.milestones, 'TargetDate', plotLineStyle);
+    },
+
+    //
+    // Given an array of all the dates plotted in the graph, return an array of plot lines.
+    //
+    // Plot lines are vertical lines that appear in the graph.  There are three types:
+    //
+    // * Iteration Plot lines: end dates of iterations
+    // * Release Plot lines: stat and end dates of iteration
+    // * Milestone Plot lines: target dates of milestones
+    //
+    // Iteration and Release plot lines are just a dotted grey lines.
+    //
+    // Milestone plot lines are thicker and colored to match the milestone, which a indicator at the top and
+    // the name of the milestone displayed.
+    //
+    // Milestone plot lines can be temporarily removed from the graph by clicking on them.
+    //
+    getAllPlotLineConfigs: function(seriesDates) {
         // filter the iterations
-        var start = new Date( Date.parse(seriesData[0]));
-        var end   = new Date( Date.parse(seriesData[seriesData.length-1]));
-        var releaseI = _.filter(this.iterations,function(i) { return i.get("EndDate") >= start && i.get("EndDate") <= end;});
-        releaseI = _.uniq(releaseI,function(i) { return i.get("Name");});
-        
-        var itPlotLines = this.parsePlotLines(seriesData, releaseI, 'EndDate',                  { dashStyle: 'dot', color: 'grey'} );
-        var rePlotLines = this.parsePlotLines(seriesData, this.selectedReleases, 'ReleaseDate', { dashStyle: 'dot', color: 'grey'} );
-        var miPlotLines = this.parsePlotLines(seriesData, this.milestones, 'TargetDate',        { dashStyle: 'dash', width: 2, showLabel: true, canRemove: true } );
-        
+        var start = new Date( Date.parse(seriesDates[0]));
+        var end   = new Date( Date.parse(seriesDates[seriesDates.length-1]));
+
+        var iterations = _.filter(this.iterations,function(i) { return i.get("EndDate") >= start && i.get("EndDate") <= end;});
+            iterations = _.uniq(iterations ,function(i) { return i.get("Name");});
+
+        var itPlotLines = this.getPlotLineConfigs(seriesDates, iterations, 'EndDate',                { dashStyle: 'dot', color: 'grey'} );
+        var rePlotLines = this.getPlotLineConfigs(seriesDates, this.selectedReleases, 'ReleaseDate', { dashStyle: 'dot', color: 'grey'} );
+        var miPlotLines = this.getMilestonePlotLineConfigs(seriesDates, true);
+
         return itPlotLines.concat(rePlotLines).concat(miPlotLines);
     },
 
     showChart : function(series) {
-        var that = this;
-
         app.resetChart();
-            
+        app.seriesDates = series[0].data;
+
         // create plotlines
-        var plotlines = this.createPlotLines(series[0].data);
-        
+        var plotlines = this.getAllPlotLineConfigs(app.seriesDates);
+
         // set the tick interval
         var tickInterval = series[1].data.length <= (7*20) ? 7 : (series[1].data.length / 20);
 
@@ -539,11 +740,11 @@ Ext.define('CustomApp', {
             chartColors : createColorsArray(series),
 
             chartConfig : {
-                chart: {
-                },
+                id: 'highchartBurndown',
+                chart: { },
                 title: {
-                text: 'Release Burnup',
-                x: -20 //center
+                    text: 'Release Burnup',
+                    x: -20 //center
                 },
                 plotOptions: {
                     series: {
@@ -578,22 +779,33 @@ Ext.define('CustomApp', {
                 legend: { align: 'center', verticalAlign: 'bottom' }
             }
         });
+
         this.add(extChart);
-        
-        app.clearLoading();
+        app.clearLoadingBug();
     },
-    
+
+    //
     // Even though we don't seem to set it explicitly, the chart is left with
-    // the loading mask on.  This hack turns it off on most browsers.
-    clearLoading: function() {
+    // the loading mask on.  This hack turns it off in FireFox and Explorer.
+    //
+    clearLoadingBug: function() {
         chart = this.down("#chart1");
-        
-        var p = Ext.get(chart.id);
-        elems = p.query("div.x-mask");
-        
-        _.each(elems, function(e) { e.remove(); });
-        var elems = p.query("div.x-mask-msg");
-        _.each(elems, function(e) { e.remove(); });
+
+        var p = Ext.get(this.id);
+        var elems = p.query("div.x-mask").concat(p.query("div.x-mask-msg"));
+
+        _.each(elems, function(e) {
+            console.log('element', e);
+            if (typeof e.remove === 'function') {
+                e.remove();
+
+            } else if (typeof e.removeNode === 'function') {
+                while (e.firstChild) {
+                    e.removeChild(e.firstChild);
+                }
+                e.removeNode();
+            }
+        });
     }
 
 });
@@ -619,10 +831,10 @@ Ext.define('CustomApp', {
             return this;
         },
 
-        pointsOffset : [],
-        countOffset : [],
-        data : [],
-        indexOffset : [],
+        pointsOffset: [],
+        countOffset: [],
+        data: [],
+        indexOffset: [],
 
         getMetrics: function () {
 
@@ -755,7 +967,7 @@ Ext.define('CustomApp', {
             return (!_.isUndefined(v) && !_.isNull(v));
         }
     };
-   
+
 });
 
                 function LineFitter()
@@ -820,9 +1032,9 @@ function getReleaseTimeBox(app) {
     return tbName;
 }
 
-// generic function to perform a web services query    
+// generic function to perform a web services query
 function wsapiQuery( config , callback ) {
-	
+
     Ext.create('Rally.data.WsapiDataStore', {
         autoLoad : true,
         limit : "Infinity",
@@ -865,19 +1077,10 @@ function pointsUnitType(type) {
 
 function createSeriesArray() {
     return [
-        { name : "PreliminaryEstimate",      description : "Preliminary Estimate",  field : "CalcPreliminaryEstimate",    display : "line", f : "sum", color : "Orange" },
         { name : "StoryPoints" ,             description : "Story Points",          field : "LeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "DarkGray" },
-        { name : "StoryCount"  ,             description : "Story Count" ,          field : "LeafStoryCount",             display : "line", f : "sum", color : "DarkGray" },
         { name : "StoryPointsProjection",    description : "Scope Projection",  projectOn : "Story Points", color : "LightGray" },
-        { name : "StoryCountProjection",     description : "Count Projection",  projectOn : "Story Count",  color : "LightGray" },
         { name : "AcceptedStoryPoints",      description : "Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "Green" },
-        { name : "AcceptedStoryCount",       description : "Accepted Count",        field : "AcceptedLeafStoryCount",  display : "line", f : "sum", color : "Green" },
-        { name : "AcceptedPointsProjection", description : "Accepted Projection", projectOn : "Accepted Points",        color : "LightGray" },
-        { name : "AcceptedCountProjection",  description : "Accepted Count Projection", projectOn : "Accepted Count",   color : "LightGray" },
-        { name : "FeatureCount",             description : "Feature Count",          field : "ObjectID",                display : "column", f : "count", color : "Blue" },
-        { name : "FeatureCountCompleted",    description : "Completed Feature Count",field : "Completed",               display : "column", f : "sum", color : "Green" },
-        { name : "HistoricalProjection",     description : "Historical Trend Projection",projectOn : "Accepted Points", color : "LightGray", hidden : true, projectFrom : "mid" },
-        { name : "RefinedEstimate" ,         description : "Refined Feature Estimate", field : "RefinedEstimate", display : "line", f : "sum", color : "DarkBlue" }
+        { name : "AcceptedPointsProjection", description : "Accepted Projection", projectOn : "Accepted Points",        color : "LightGray" }
     ];
 }
 
@@ -891,11 +1094,11 @@ function createColorsArray( series ) {
                 return a.description === s.name;
             });
             if (!_.isUndefined(as)) {
-                colors.push(as.color);    
+                colors.push(as.color);
             } else {
                 colors.push("LightGray");
             }
-            
+
         }
     });
 
