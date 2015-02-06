@@ -602,12 +602,15 @@ Ext.define('CustomApp', {
 
             if (plotLineStyle.showLabel) {
                 var text = labelHTML;
+                var yLabelOffset = -1;
 
                 if (plotLineStyle.showLabelTitles) {
-                    if (plotLineCount % 2) {  // Every other title, move down one line, and right with non breaking spaces
-                        text += '<br><span>\u00A0\u00A0\u00A0</span>';
-                    }
                     text += labelTitle;
+
+                    if (plotLineCount % 2) {  // Every other title, move down one line, and right with non breaking spaces
+//                        text += '<br><span>\u00A0\u00A0\u00A0</span>';  Does not work with IE
+                        yLabelOffset = 15;
+                    }
                 }
 
                 plotLineConfig.label = {
@@ -615,7 +618,7 @@ Ext.define('CustomApp', {
                     rotation: 0,
                     verticalAlign: 'top',
                     x: -6,
-                    y: -1,
+                    y: yLabelOffset,
                     textAlign: 'left',
                     useHTML: true
                 };
