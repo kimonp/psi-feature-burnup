@@ -46,7 +46,7 @@ Ext.define('CustomApp', {
                 fieldLabel: 'Include Defects',
                 labelAlign: 'right',
                 margin: 8,
-                value: false,
+                value: true,
                 itemId: 'includeDefects',
                 handler: function(checkbox, showLabels) {
                     app.createChart();
@@ -602,19 +602,20 @@ Ext.define('CustomApp', {
 
             if (plotLineStyle.showLabel) {
                 var text = labelHTML;
-                var yLabelOffset = 0;
 
                 if (plotLineStyle.showLabelTitles) {
+                    if (plotLineCount % 2) {  // Every other title, move down one line, and right with non breaking spaces
+                        text += '<br><span>\u00A0\u00A0\u00A0</span>';
+                    }
                     text += labelTitle;
-                    yLabelOffset = (plotLineCount % 2) ? 10 : -5; // Lower ever other label (via mod 2)
                 }
 
                 plotLineConfig.label = {
                     text: text,
                     rotation: 0,
                     verticalAlign: 'top',
-                    y: yLabelOffset,
                     x: -6,
+                    y: -1,
                     textAlign: 'left',
                     useHTML: true
                 };
