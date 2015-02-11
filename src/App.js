@@ -51,21 +51,36 @@ Ext.define('CustomApp', {
                 handler: function(checkbox, showLabels) {
                     app.createChart();
                 }
-/*            }, {
-                xtype: 'label',
-                labelAlign: 'right',
-                itemId: 'defectPoints',
-                text: 'Defect Points: ',
-                padding: 3,
-                margin: 10
             }, {
                 xtype: 'label',
                 labelAlign: 'right',
-                itemId: 'totalPoints',
-                text: 'Total Points: ',
+                itemId: 'acceptedPoints',
+                data: {
+                    acceptedPoints: '-',
+                    totalPoints: '-',
+                    pct: ''
+                },
+                tpl: new Ext.XTemplate('Accepted: {acceptedPoints} Total: {totalPoints} {pct}'),
                 padding: 3,
                 margin: 10
- */           }]
+           }]
+
+        }, {
+            xtype: 'panel',
+            layout: 'fit',
+            items: [
+                {
+                    xtype: 'panel',
+                    itemId: 'chartPanel',
+                    layout: 'fit',
+                    minHeight: 500,
+                    minWidth: 100
+                }
+            ]
+        }, {
+            xtype: 'panel',
+            itemId: 'gridPanel',
+            layout: { type: 'vbox', align: 'left' }
         }
     ],
 
@@ -309,10 +324,10 @@ Ext.define('CustomApp', {
         app.setLoading(false);
 
         var chart = app.down("#chart1");
-
         if (chart !== null) {
             chart.removeAll();
         }
+
 
         if (mesg) {
             Rally.ui.notify.Notifier.show({message: mesg, color: 'red'});
@@ -529,6 +544,215 @@ Ext.define('CustomApp', {
         var hc = lumenize.arrayOfMaps_To_HighChartsSeries(seriesData, hcConfig);
 
         this.showChart( trimHighChartsConfig(hc) );
+
+        this.calculateMilestoneVelocities(seriesData);
+        this.setReleaseInfo(seriesData);
+    },
+
+    calculateMilestoneVelocities: function(seriesData) {
+        var items	= this.getMilestoneItems(seriesData);
+        var store	= Ext.create('Ext.data.Store', {
+            	storeId: 'milestoneVelocityStore',
+            	fields: ['startName', 'endName', 'days', 'acceptVelocity', 'acceptDelta', 'scopeVelocity', 'scopeDelta', 'segmentVelPerMo', 'segmentVel'],
+                data: { 'items': items },
+                proxy: { type: 'memory', reader: { type: 'json', root: 'items' } }
+            });
+        console.log('store', store);
+
+        var oldPanel  = app.down("#gridPanel");
+        if (oldPanel !== null) {
+            console.log('remove oldGrid', oldPanel);
+            oldPanel.removeAll();
+        }
+
+        var statsGrid = Ext.create('Ext.grid.Panel', {
+            title: 'Milestone Segment Velocities',
+            itemId: 'statsGrid',
+            store: store,
+            columns: [
+//                      { text: 'Start Milestone',   dataIndex: 'startName', flex: 1 },
+                      { text: 'End Milestone',       dataIndex: 'endName', flex: 200, align: 'right' },
+                      { text: 'Segment Velocity', dataIndex: 'segmentVel' },
+                      { text: 'SV / Month', dataIndex: 'segmentVelPerMo' },
+                      { text: 'Accepted Points',     dataIndex: 'acceptDelta', hidden: true},
+                      { text: 'Scope Change',        dataIndex: 'scopeDelta', hidden: true }
+            ],
+            width: 400,
+            renderTo: Ext.getBody()
+        });
+
+        var panel = app.down('#gridPanel');
+        panel.add(statsGrid);
+        panel.update();
+    },
+
+    //
+    // Initialize the milestoneDates collection, used to calculate segment velocities
+    // With the start end end date of the release
+    //
+    initializeMilestoneSegments:  function (seriesData) {
+        var start		   = seriesData[0];
+        var startDate	   = start.label;
+
+        var end			   = seriesData[seriesData.length-1];
+        var endDate		   = end.label;
+
+        var milestoneDates = {};
+
+    	milestoneDates[startDate] = {
+                pointData: start,
+                milestoneList:[{ Name: 'Start of Release' }]
+    		};
+
+    	milestoneDates[endDate] = {
+                pointData: end,
+                milestoneList:[{ Name: 'End of Release' }]
+    		};
+        milestoneDates[startDate].pointData.nextDate = endDate;
+
+    	return milestoneDates;
+    },
+
+    // Populate milestoneSegments:
+    //   keys are the dates of the milestones
+    //   values are: the data that exists on the graph at that date (filled in later) and an array of Milestones for that date
+    //
+    populateMilestoneSegmentDates: function(seriesData) {
+        var milestoneDates	= app.initializeMilestoneSegments(seriesData);
+        var relStartDate 	= seriesData[0].label; // Date of the end of the release
+        var end				= seriesData[seriesData.length-1];
+        var relEndDate 		= end.label; // Date of the end of the release
+        var today		   = Ext.Date.format(new Date(), 'Y-m-d');
+
+        console.log('inital milestoneDates', milestoneDates);
+
+        var lastDate		= relStartDate; // Date of the last segment end as we step through them
+        _.every( app.milestones.reverse(), function(milestone) {
+            var data = milestone.raw;
+            var date = data.TargetDate.replace(/T.*/, '');
+
+            if (date > today) {
+                data.Name = 'Today - ' + today;
+            }
+
+            if (date > relStartDate && date < relEndDate) {
+                var dateInfo = milestoneDates[date];
+                    if (!dateInfo) { dateInfo = milestoneDates[date] = { pointData: {}, milestoneList:[] }; }
+
+                dateInfo.milestoneList.push(data);
+
+                if (lastDate) {
+                    milestoneDates[lastDate].pointData.nextDate = date;
+                }
+                lastDate = date;
+            }
+
+           	return !app.dateIsFuture(date); // Quit once we get past the current date
+        });
+
+        return milestoneDates;
+    },
+
+    getMilestoneItems: function(seriesData) {
+        var items	 	= [];
+
+        var milestoneDates = app.populateMilestoneSegmentDates(seriesData);
+        var today		   = Ext.Date.format(new Date(), 'Y-m-d');
+        var todayPointData = null;
+        //
+        // Step through the chart series data, and fill in the pointDate information into milestoneDates
+        //
+        _.each( seriesData, function(pointData) {
+            var date		= pointData.label;
+            var dateEntry	= milestoneDates[date];
+
+            if (dateEntry) {
+            	dateEntry.pointData = _.extend(dateEntry.pointData, pointData);
+            }
+
+            if (date == today) {
+                todayPointData = pointData;
+            }
+        });
+
+        //
+        // Step through milestoneDates, and create a velocity entry each segment between
+        // the Start of the release, each milestone and the end of the release or current date
+        //
+        _.each( milestoneDates, function(data, date) {
+            var pointData = data.pointData;
+            var nextDate  = pointData.nextDate;
+
+            if (app.dateIsFuture(date)) {
+            	// Skip stuff that has not yet happened
+
+            } else if (nextDate) {
+                var nextName	  = milestoneDates[nextDate].milestoneList[0].Name;
+                var nextPointData = milestoneDates[nextDate].pointData;
+                	if (nextDate > today && todayPointData) { // Truncate to today, if the segment ends after the current date
+                        nextPointData = todayPointData;
+                        nextDate = today;
+                	}
+                var acceptedDiff  = nextPointData['Accepted Points'] - pointData['Accepted Points'];
+                var scopeDiff	  = nextPointData['Story Points'] - pointData['Story Points'];
+                var days	  	  = app.subtractDates(nextDate, date);
+                var months		  = days / 30;
+
+                _.each( data.milestoneList, function(milestone, date) {
+                    var name = milestone.Name;
+
+                    if (!_.isNaN(acceptedDiff)) {
+                        items.push({
+                            startName:		name,
+                            endName:		nextName + ' (' + days + ' days)',
+                            days:			days,
+                            segmentVel:		acceptedDiff - scopeDiff,
+                            segmentVelPerMo:Math.round((acceptedDiff - scopeDiff)/months * 100) / 100,
+
+                            acceptDelta:    app.velocityStr(acceptedDiff, months),
+                            scopeDelta:     app.velocityStr(scopeDiff, months),
+                            effectiveVel:   app.velocityStr(acceptedDiff - scopeDiff, months)
+                        });
+                    }
+                });
+            }
+        });
+        return items;
+    },
+
+    dateIsFuture: function(dateStr) {
+        var date	= Ext.Date.parse(dateStr, 'Y-m-d');
+        var today	= new Date();
+
+        return date > today;
+    },
+
+    velocityStr: function(pointDelta, months) {
+        var velocity	  = Math.round(pointDelta / months * 100) / 100 ;
+
+        return pointDelta  + ' (' + velocity + '/mo)';
+    },
+
+    subtractDates: function(d1, d2) {
+        var date1 = new Date(d1);
+        var date2 = new Date(d2);
+        var diff  = date1.getTime() - date2.getTime();
+
+        return diff / (24*60*60*1000);
+    },
+
+    setReleaseInfo: function(seriesData) {
+        var entryCount 		= seriesData.length - 1;
+        var lastEntry		= seriesData[entryCount];
+        var acceptedPoints	= lastEntry['Accepted Points'];
+        var totalPoints		= lastEntry['Story Points'];
+        var textLabel		= this.down('#acceptedPoints');
+
+        textLabel.update({
+        	acceptedPoints: acceptedPoints,
+        	totalPoints: totalPoints,
+        	pct: totalPoints ? ('(' + Math.round(acceptedPoints/totalPoints*100) + '%)') : '-'
+        });
     },
 
     getChartXAxis: function() {
@@ -727,7 +951,6 @@ Ext.define('CustomApp', {
             chartColors : createColorsArray(series),
 
             chartConfig : {
-                id: 'highchartBurndown',
                 chart: { },
                 title: {
                     text: ' ', // Leave it blank...could be "Release Burnup", or the name of the project/release
@@ -763,11 +986,16 @@ Ext.define('CustomApp', {
                 },
                 tooltip: {
                 },
-                legend: { align: 'center', verticalAlign: 'bottom' }
+                legend: { align: 'center', verticalAlign: 'bottom' },
+                renderTo: Ext.getBody()
             }
         });
+//        var size = extChart.getSize();
+        console.log('chart size', extChart);
 
-        this.add(extChart);
+        var panel = app.down('#chartPanel');
+        panel.add(extChart);
+
         app.clearLoadingBug();
     },
 
