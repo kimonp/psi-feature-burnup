@@ -52,17 +52,16 @@ Ext.define('CustomApp', {
                     app.createChart();
                 }
             }, {
-                xtype: 'label',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Only P0s',
                 labelAlign: 'right',
-                itemId: 'acceptedPoints',
-                data: {
-                    acceptedPoints: '-',
-                    totalPoints: '-',
-                    pct: ''
-                },
-                tpl: new Ext.XTemplate('Accepted: {acceptedPoints} Total: {totalPoints} {pct}'),
-                padding: 3,
-                margin: 10
+                margin: 8,
+                value: false,
+                itemId: 'onlyP0s',
+                handler: function(checkbox, showLabels) {
+                    app.resetData();
+                    app.createChart();
+                }
            }]
 
         }, {
@@ -80,12 +79,18 @@ Ext.define('CustomApp', {
         }, {
             xtype: 'panel',
             itemId: 'gridPanel',
-            layout: { type: 'vbox', align: 'left' }
+            layout: { type: 'hbox', align: 'left' }
         }
     ],
 
     includeDefects: function() {
         var checkbox = this.down('#includeDefects');
+
+        return checkbox.value;
+    },
+
+    onlyP0s: function() {
+        var checkbox = this.down('#onlyP0s');
 
         return checkbox.value;
     },
@@ -410,14 +415,19 @@ Ext.define('CustomApp', {
         var extent = app.getReleaseExtent(app.releases);
         // console.log("ids",ids,pes);
         var relIDs = _.map(app.releases, function (release) { return release.data.ObjectID; });
-
-        var storeConfig = {
-            find : {
+        var find = {
 //                'ObjectID' : { "$in" : ids },
                 '_TypeHierarchy' : { "$in" : [app.featureType] },
                 'Release': { "$in" : relIDs },
                 '_ValidTo' : { "$gte" : extent.isoStart }
-            },
+            };
+
+            if (app.onlyP0s()) {
+                find.c_Priority = { "$in": ['P0']};
+            }
+
+        var storeConfig = {
+            find : find,
             autoLoad : true,
             pageSize:1000,
             limit: 'Infinity',
@@ -547,23 +557,7 @@ Ext.define('CustomApp', {
 
         this.showChart( trimHighChartsConfig(hc) );
 
-        this.velocityCalc.setMilestoneVelocityGrid(seriesData, app.milestones);
-
-        this.setReleaseInfo(seriesData);
-    },
-
-    setReleaseInfo: function(seriesData) {
-        var entryCount 		= seriesData.length - 1;
-        var lastEntry		= seriesData[entryCount];
-        var acceptedPoints	= lastEntry['Accepted Points'];
-        var totalPoints		= lastEntry['Story Points'];
-        var textLabel		= this.down('#acceptedPoints');
-
-        textLabel.update({
-        	acceptedPoints: acceptedPoints,
-        	totalPoints: totalPoints,
-        	pct: totalPoints ? ('(' + Math.round(acceptedPoints/totalPoints*100) + '%)') : '-'
-        });
+        this.velocityCalc.addGrids(seriesData, app.milestones);
     },
 
     getChartXAxis: function() {
