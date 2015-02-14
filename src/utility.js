@@ -56,16 +56,42 @@ function pointsUnitType(type) {
         return type=="Points";
 }
 
+//
+// Default settings for the Rally App (in utilities, because these keys are also used in createSeries Array)
+//
+function getDefaultSettings() {
+    return {
+        releases                : "",
+        epicIds                 : "",
+        ignoreZeroValues        : true,
+
+        StoryPoints             : true,
+        StoryPointsProjection   : true,
+        AcceptedStoryPoints     : true,
+        AcceptedPointsProjection: true,
+
+        P0StoryPoints           : true,
+        P0AccStoryPoints        : true,
+        P0StoryPointsProjection : true,
+        P0AccStoryPointsProjection: true
+    };
+}
+
 function createSeriesArray() {
     return [
         { name : "StoryPoints" ,             description : "Story Points",          field : "LeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "DarkGray" },
         { name : "StoryPointsProjection",    description : "Scope Projection",  projectOn : "Story Points", color : "LightGray" },
         { name : "AcceptedStoryPoints",      description : "Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "Green" },
         { name : "AcceptedPointsProjection", description : "Accepted Projection", projectOn : "Accepted Points",        color : "LightGray" },
+
         { name : "P0StoryPoints" ,           description : "P0 Story Points",       field : "LeafStoryPlanEstimateTotal",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "Black" },
         { name : "P0AccStoryPoints" ,           description : "P0 Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal",
-            filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "DarkRed" }
+            filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "DarkRed" },
+        { name : "P0StoryPointsProjection",    description : "P0 Scope Projection",  projectOn : "P0 Story Points",
+            filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "LightGray" },
+        { name : "P0AccPointsProjection", description : "P0 Accepted P0 Projection", projectOn : "P0 Accepted Points",
+            filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "LightGray" },
     ];
 }
 

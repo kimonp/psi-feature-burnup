@@ -110,18 +110,7 @@ Ext.define('CustomApp', {
 
     // switch to app configuration from ui selection
     config: {
-        defaultSettings : {
-            releases                : "",
-            epicIds                 : "",
-            ignoreZeroValues        : true,
-            StoryPoints             : true,
-            StoryPointsProjection   : true,
-            AcceptedStoryPoints     : true,
-            AcceptedPointsProjection: true,
-            P0StoryPoints           : true,
-            P0AccStoryPoints        : true
-        }
-
+        defaultSettings : getDefaultSettings()
     },
 
     getSettingsFields: function() {
