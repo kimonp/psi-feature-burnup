@@ -117,7 +117,9 @@ Ext.define('CustomApp', {
             StoryPoints             : true,
             StoryPointsProjection   : true,
             AcceptedStoryPoints     : true,
-            AcceptedPointsProjection: true
+            AcceptedPointsProjection: true,
+            P0StoryPoints           : true,
+            P0AccStoryPoints        : true
         }
 
     },
@@ -426,13 +428,15 @@ Ext.define('CustomApp', {
                 find.c_Priority = { "$in": ['P0']};
             }
 
-        var storeConfig = {
+        var featureStoreConfig = {
             find : find,
             autoLoad : true,
             pageSize:1000,
             limit: 'Infinity',
 //            fetch: ['_UnformattedID','ObjectID','_TypeHierarchy','PreliminaryEstimate', 'LeafStoryCount','LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal','AcceptedLeafStoryCount','PercentDoneByStoryCount','RefinedEstimate']
-            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal']
+//            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal']
+            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal', 'c_Priority'],
+            hydrate: ['c_Priority']
         };
 
         console.log('releases', _.map(app.releases, function (release) { return release.data.ObjectID; }));
@@ -458,7 +462,7 @@ Ext.define('CustomApp', {
             }
         };
 
-        storeConfig.listeners = {
+        featureStoreConfig.listeners = {
             scope : this,
             load: function(store, snapshots, success) {
                 console.log("Loaded:"+snapshots.length," Feature Snapshots.");
@@ -469,7 +473,7 @@ Ext.define('CustomApp', {
 
         if (!this.featureSnapshots) {
             console.log("Querying for feature snapshots");
-            Ext.create('Rally.data.lookback.SnapshotStore', storeConfig);
+            Ext.create('Rally.data.lookback.SnapshotStore', featureStoreConfig);
         }
         if (this.includeDefects()) {
             console.log("Querying for defects snapshots");
@@ -486,6 +490,7 @@ Ext.define('CustomApp', {
         _(defectSnapshots).forEach(function(defect) {
             defect.data.LeafStoryPlanEstimateTotal = defect.data.PlanEstimate;
 
+            defect.data.c_Priority = 'P0'; // Defects all considered P0
             defect.data.AcceptedLeafStoryPlanEstimateTotal =
                 defect.data.ScheduleState === 'Accepted' ? defect.data.PlanEstimate : 0;
         });
@@ -513,6 +518,8 @@ Ext.define('CustomApp', {
         var lumenize     = window.parent.Rally.data.lookback.Lumenize;
         var snapShotData = _.map(snapshots,function(d){return d.data;});
         var extent       = app.getReleaseExtent(app.releases);
+
+        console.log('snapShotData', snapShotData);
 
         // can be used to 'knockout' holidays
         var holidays = [

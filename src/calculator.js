@@ -32,13 +32,20 @@ Ext.define("MyBurnCalculator", function() {
             });
 
             var metrics = _.map( nonProjectionMetrics, function(m) {
-                return {
+                var row = {
                     field : m.field,
                     as : m.description,
                     display : m.display,
                     f : m.f
                 };
+                if (m.filterField) {
+                    row.filterField = m.filterField;
+                    row.filterValues = m.filterValues;
+                }
+
+                return row;
             });
+            console.log('metrics', metrics, self.series);
 
             return metrics;
         },
@@ -146,7 +153,9 @@ Ext.define("MyBurnCalculator", function() {
                         return p;
                     }
                 };
+
             });
+
             return metrics;
 
         },

@@ -61,7 +61,11 @@ function createSeriesArray() {
         { name : "StoryPoints" ,             description : "Story Points",          field : "LeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "DarkGray" },
         { name : "StoryPointsProjection",    description : "Scope Projection",  projectOn : "Story Points", color : "LightGray" },
         { name : "AcceptedStoryPoints",      description : "Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "Green" },
-        { name : "AcceptedPointsProjection", description : "Accepted Projection", projectOn : "Accepted Points",        color : "LightGray" }
+        { name : "AcceptedPointsProjection", description : "Accepted Projection", projectOn : "Accepted Points",        color : "LightGray" },
+        { name : "P0StoryPoints" ,           description : "P0 Story Points",       field : "LeafStoryPlanEstimateTotal",
+            filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "Black" },
+        { name : "P0AccStoryPoints" ,           description : "P0 Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal",
+            filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "DarkRed" }
     ];
 }
 

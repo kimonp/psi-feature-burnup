@@ -1,5 +1,6 @@
 Ext.define("VelocityCalculator", {
     app: null,
+    gridPanelId: '#gridPanel',
 
     constructor: function(theApp) {
         this.app = theApp;
@@ -7,7 +8,122 @@ Ext.define("VelocityCalculator", {
         return this;
     },
 
-    setMilestoneVelocityGrid: function(seriesData, milestones) {
+    today: function() {
+        return Ext.Date.format(new Date(), 'Y-m-d');
+    },
+
+    resetPanel: function() {
+        var panel  = this.app.down(this.gridPanelId);
+
+        if (panel !== null) {
+            console.log('remove oldGrid', panel);
+            panel.removeAll();
+        }
+    },
+
+    addGridsToPanel: function (grids) {
+
+        var panel = this.app.down(this.gridPanelId);
+
+        _.each(grids, function(newGrid) {
+            panel.add(newGrid);
+        });
+        panel.update();
+    },
+
+    addGrids: function(seriesData, milestones, iterations) {
+        this.resetPanel();
+
+        this.addGridsToPanel([
+        		 this.getOverallVelocityGrid(seriesData),
+        		 this.getMilestoneVelocityGrid(seriesData, milestones),
+        		 this.getIterationVelocityGrid(seriesData, iterations)
+        ]);
+    },
+
+    getOverallVelocityGrid: function(seriesData) {
+        var entryCount 		= seriesData.length - 1;
+        var firstEntry		= seriesData[0];
+        var lastEntry		= seriesData[entryCount];
+        var startDate		= firstEntry.label;
+        var endDate			= lastEntry.label;
+        var today			= this.today();
+        var compDate		= today < endDate ? today : endDate;
+
+        var startAccPoints	= firstEntry['Accepted Points'];
+        var acceptedPoints	= lastEntry['Accepted Points'];
+        var curAccPoints	= acceptedPoints - startAccPoints;
+        var totalPoints		= lastEntry['Story Points'];
+        var acceptedPct		= totalPoints ? Math.round(curAccPoints/totalPoints*100) + '%' : '-';
+        var totalDays	  	= this.subtractDates(endDate, startDate);
+        var daysPast	  	= this.subtractDates(compDate, startDate);
+        var monthsPast	    = daysPast / 30;
+        var daysPct			= totalDays ? Math.round(daysPast/totalDays*100) + '%' : '-';
+        var avgMoVelocity	= monthsPast ? Math.round(curAccPoints/monthsPast) : '-';
+
+        var stats			= [
+                 { stat: 'Avg. Velocity / Month', value: avgMoVelocity },
+                 { stat: 'Total Points', value: totalPoints },
+                 { stat: 'Accepted Points', value: acceptedPoints },
+                 { stat: 'Accepted % Since Start', value: acceptedPct },
+                 { stat: '% Time Used', value: daysPct }
+           ];
+        var store	= Ext.create('Ext.data.Store', {
+            	storeId: 'milestoneVelocityStore',
+            	fields: ['stat', 'value'],
+                data: { 'items': stats },
+                proxy: { type: 'memory', reader: { type: 'json', root: 'items' } }
+            });
+
+        var newGrid = Ext.create('Ext.grid.Panel', {
+            title: 'Overall Stats',
+            itemId: 'velocityStatsGrid',
+            store: store,
+            columns: [
+                      { text: 'Statistic',  dataIndex: 'stat', flex: 200, align: 'right' },
+                      { text: 'Value',      dataIndex: 'value'}
+            ],
+            width: 400,
+            renderTo: Ext.getBody()
+        });
+
+        return newGrid;
+    },
+
+    getIterationItems: function(seriesData) {
+        return [];
+    },
+
+    getIterationVelocityGrid: function(seriesData, iterations) {
+        this.milestones = iterations;
+
+        var items	= this.getIterationItems(seriesData);
+        var store	= Ext.create('Ext.data.Store', {
+            	storeId: 'milestoneVelocityStore',
+            	fields: ['name', 'days', 'acceptVelocity', 'acceptDelta', 'scopeVelocity', 'scopeDelta', 'segmentVelPerMo', 'velocity'],
+                data: { 'items': items },
+                proxy: { type: 'memory', reader: { type: 'json', root: 'items' } }
+            });
+
+        var newGrid = Ext.create('Ext.grid.Panel', {
+            title: 'Iteration Velocities',
+            itemId: 'iterationVelocitiesGrid',
+            store: store,
+            columns: [
+                      { text: 'Iteration',       dataIndex: 'name', flex: 200, align: 'right' },
+                      { text: 'Velocity', dataIndex: 'velocity' },
+                      { text: 'SV / Month', dataIndex: 'segmentVelPerMo' },
+                      { text: 'Accepted Points',     dataIndex: 'acceptDelta', hidden: true},
+                      { text: 'Scope Change',        dataIndex: 'scopeDelta', hidden: true }
+            ],
+            width: 400,
+            renderTo: Ext.getBody()
+        });
+
+        return newGrid;
+    },
+
+    getMilestoneVelocityGrid: function(seriesData, milestones) {
         this.milestones = milestones;
 
         var items	= this.getMilestoneItems(seriesData);
@@ -17,21 +133,14 @@ Ext.define("VelocityCalculator", {
                 data: { 'items': items },
                 proxy: { type: 'memory', reader: { type: 'json', root: 'items' } }
             });
-        console.log('store', store);
 
-        var oldPanel  = this.app.down("#gridPanel");
-        if (oldPanel !== null) {
-            console.log('remove oldGrid', oldPanel);
-            oldPanel.removeAll();
-        }
-
-        var statsGrid = Ext.create('Ext.grid.Panel', {
+        var newGrid = Ext.create('Ext.grid.Panel', {
             title: 'Milestone Segment Velocities',
-            itemId: 'statsGrid',
+            itemId: 'milestoneVelocitiesGrid',
             store: store,
             columns: [
-//                      { text: 'Start Milestone',   dataIndex: 'startName', flex: 1 },
-                      { text: 'End Milestone',       dataIndex: 'endName', flex: 200, align: 'right' },
+                      { text: 'Segment Start',   dataIndex: 'startName', flex: 200, hidden: true  },
+                      { text: 'Segment End',       dataIndex: 'endName', flex: 200, align: 'right' },
                       { text: 'Segment Velocity', dataIndex: 'segmentVel' },
                       { text: 'SV / Month', dataIndex: 'segmentVelPerMo' },
                       { text: 'Accepted Points',     dataIndex: 'acceptDelta', hidden: true},
@@ -41,9 +150,7 @@ Ext.define("VelocityCalculator", {
             renderTo: Ext.getBody()
         });
 
-        var panel = this.app.down('#gridPanel');
-        panel.add(statsGrid);
-        panel.update();
+        return newGrid;
     },
 
     //
