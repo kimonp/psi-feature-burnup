@@ -33,34 +33,55 @@ Ext.define('CustomApp', {
                 }
             }, {
                 xtype: 'rallycheckboxfield',
-                fieldLabel: 'Milestone Titles',
+                itemId: 'milestoneLabels',
+                fieldLabel: 'Milestone Labels',
                 labelAlign: 'right',
                 margin: 8,
                 value: true,
                 handler: function(checkbox, showLabels) {
-                    app.removeAllMilestonePlotLines();
-                    app.addMilestonePlotLines(showLabels);
+                    app.removePlotLines('milestone');
+                    app.addPlotLines('milestone', showLabels);
                 }
             }, {
                 xtype: 'rallycheckboxfield',
+                itemId: 'iterationLabels',
+                fieldLabel: 'Iteration Labels',
+                labelAlign: 'right',
+                margin: 8,
+                value: true,
+                handler: function(checkbox, showLabels) {
+                    app.removePlotLines('iterationStart');
+                    app.addPlotLines('iterationStart', showLabels);
+                }
+            }, {
+                xtype: 'rallycheckboxfield',
+                itemId: 'includeDefects',
                 fieldLabel: 'Include Defects',
                 labelAlign: 'right',
                 margin: 8,
                 value: true,
-                itemId: 'includeDefects',
                 handler: function(checkbox, showLabels) {
                     app.createChart();
                 }
             }, {
                 xtype: 'rallycheckboxfield',
-                fieldLabel: 'Only P0s',
+                itemId: 'showP0s',
+                fieldLabel: 'Show P0s',
                 labelAlign: 'right',
                 margin: 8,
                 value: false,
-                itemId: 'onlyP0s',
                 handler: function(checkbox, showLabels) {
-                    app.resetData();
-                    app.createChart();
+                	app.createAndShowBurnupChart();
+                }
+            }, {
+                xtype: 'rallycheckboxfield',
+                itemId: 'showProjections',
+                fieldLabel: 'Show Projections',
+                labelAlign: 'right',
+                margin: 8,
+                value: false,
+                handler: function(checkbox, showLabels) {
+                	app.createAndShowBurnupChart();
                 }
            }]
 
@@ -83,17 +104,18 @@ Ext.define('CustomApp', {
         }
     ],
 
-    includeDefects: function() {
-        var checkbox = this.down('#includeDefects');
+    getCheckboxValue: function(checkBoxId) {
+        var checkbox = this.down('#' + checkBoxId);
 
         return checkbox.value;
     },
 
-    onlyP0s: function() {
-        var checkbox = this.down('#onlyP0s');
-
-        return checkbox.value;
-    },
+    milestoneLabels: function() { return this.getCheckboxValue('milestoneLabels'); },
+    iterationLabels: function() { return this.getCheckboxValue('iterationLabels'); },
+    includeDefects:  function() { return this.getCheckboxValue('includeDefects'); },
+    showP0s:		 function() { return this.getCheckboxValue('showP0s'); },
+    showProjections: function() { return this.getCheckboxValue('showProjections'); },
+    onlyP0s:		 function() { return false; }, // Used to be a checkbox, but now since we have the P0 lines as well, no longer needed
 
     // Called when the release combo box is ready or selected.  This triggers the building of the chart.
     setSelectedRelease: function(releaseCombo) {
@@ -428,7 +450,7 @@ Ext.define('CustomApp', {
             hydrate: ['c_Priority']
         };
 
-        console.log('releases', _.map(app.releases, function (release) { return release.data.ObjectID; }));
+//        console.log('releases', _.map(app.releases, function (release) { return release.data.ObjectID; }));
 
         var defectStoreConfig = {
             find: {
@@ -508,8 +530,6 @@ Ext.define('CustomApp', {
         var snapShotData = _.map(snapshots,function(d){return d.data;});
         var extent       = app.getReleaseExtent(app.releases);
 
-        console.log('snapShotData', snapShotData);
-
         // can be used to 'knockout' holidays
         var holidays = [
             //{year: 2014, month: 1, day: 1}  // Made up holiday to test knockout
@@ -542,10 +562,18 @@ Ext.define('CustomApp', {
         // create a high charts series config object, used to get the hc series data
         var hcConfig = [{ name : "label" }];
         _.each( app.series, function(s) {
-            if ( app.getSetting(s.name)===true) {
-                hcConfig.push({
-                   name : s.description, type : s.display
-                });
+            if (app.getSetting(s.name) === true) {
+                var desc = s.description;
+
+                if (desc.match('P0') && !app.showP0s()) {
+                    // skip
+                } else if (desc.match('Projection') && !app.showProjections()) {
+                    // skip
+                } else {
+                    hcConfig.push({
+                       name : s.description, type : s.display
+                    });
+                }
             }
         });
         var seriesData = calculator.getResults().seriesData;
@@ -553,7 +581,7 @@ Ext.define('CustomApp', {
 
         this.showChart( trimHighChartsConfig(hc) );
 
-        this.velocityCalc.addGrids(seriesData, app.milestones);
+        this.velocityCalc.addGrids(seriesData, app.milestones, app.iterations);
     },
 
     getChartXAxis: function() {
@@ -563,12 +591,12 @@ Ext.define('CustomApp', {
         return xAxisArray[0];
     },
 
-    removeAllMilestonePlotLines: function() {
+    removePlotLines: function(labelHead) {
         var xAxis		= this.getChartXAxis();
         var plotLines	= xAxis.plotLinesAndBands;
         var ids			= [];
             _(plotLines).forEach(function(plotLine) {
-                if (plotLine && plotLine.id) {
+                if (plotLine && plotLine.id.match(labelHead + '-')) {
                     ids.push(plotLine.id);
                 }
             });
@@ -578,11 +606,13 @@ Ext.define('CustomApp', {
         });
     },
 
-    addMilestonePlotLines: function(showLabelTitles) {
+    addPlotLines: function(plotLineType, showLabelTitles) {
         var xAxis		= this.getChartXAxis();
-        var miPlotLines = this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles);
+        var plotLines = plotLineType == 'milestone'
+        				? this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles)
+        				: this.getIterationPlotLineConfigs(app.seriesDates, showLabelTitles, 'start');
 
-        _(miPlotLines).forEach(function(plotLine) {
+        _(plotLines).forEach(function(plotLine) {
             xAxis.addPlotLine(plotLine);
         });
     },
@@ -596,7 +626,8 @@ Ext.define('CustomApp', {
     // plotLineStyle: Style of the plot line to be passed to highcharts.  Also contains several special fields that we interpret here
     //
     //                 showLabel: Label the plotline as the name of the record it represents (e.g. Milestone Name)
-    //                 canRemove: Plot line can be removed (temporarily) by clicking on it
+    //              plotLineType: 'milestone' can be removed by clicking and have special labels
+    //                            'iterationStart' has labels
     //                     color: Enter an explit color, otherwise it will try to lookup the DisplayColor of the object (works for Milestones),
     //                            else it will default to grey
     //
@@ -609,7 +640,8 @@ Ext.define('CustomApp', {
     // which is pretty close.  So we will display that in the color of the milestone.
     //
     getPlotLineConfigs: function(seriesDates, recordArray, dateField, plotLineStyle) {
-        var plotLineCount = 1;
+        var plotLineCount	= 1;
+        var plotLineType	= plotLineStyle.plotLineType || 'unknown';
 
         var plotLineConfigs = _.map(recordArray, function(record){
             var d = new Date(Date.parse(record.raw[dateField])).toISOString().split("T")[0];
@@ -625,7 +657,7 @@ Ext.define('CustomApp', {
                 value: _.indexOf(seriesDates,d)
             };
 
-            if (plotLineStyle.showLabel) {
+            if (plotLineType == 'milestone') {
                 var text = labelHTML;
                 var yLabelOffset = -1;
 
@@ -648,11 +680,20 @@ Ext.define('CustomApp', {
                     useHTML: true
                 };
                 plotLineCount++;
+
+            } else if (plotLineType == 'iterationStart' && plotLineStyle.showLabelTitles) {
+                plotLineConfig.label = {
+                    text: labelTitle,
+                    rotation: 270,
+                    y: -5,
+                    x: 10,
+                    verticalAlign: 'bottom'
+                };
             }
 
-            if (plotLineStyle.canRemove) {
+            if (plotLineType) {
                 var name       = record.get("Name");
-                var plotLineId = 'milestone-' + name;
+                var plotLineId = plotLineType + '-' + name;
 
                 plotLineConfig.id = plotLineId;
 
@@ -695,9 +736,23 @@ Ext.define('CustomApp', {
     },
 
     getMilestonePlotLineConfigs: function(seriesDates, showLabelTitles) {
-        var plotLineStyle	= { dashStyle: 'dash', width: 2, showLabel: true, showLabelTitles: showLabelTitles, canRemove: true };
+        var plotLineStyle	= { dashStyle: 'dash', width: 2, showLabel: true, showLabelTitles: showLabelTitles, plotLineType: 'milestone'};
 
         return this.getPlotLineConfigs(seriesDates, this.milestones, 'TargetDate', plotLineStyle);
+    },
+
+    getIterationPlotLineConfigs: function(seriesDates, showLabelTitles, type) {
+        var plotLineType	= type == 'start' ? 'iterationStart'	: 'iterationEnd';
+        var dateField		= type == 'start' ? 'StartDate'			: 'EndDate';
+        var start = new Date( Date.parse(seriesDates[0]));
+        var end   = new Date( Date.parse(seriesDates[seriesDates.length-1]));
+
+        var iterations = _.filter(this.iterations,function(i) { return i.get("EndDate") >= start && i.get("EndDate") <= end;});
+            iterations = _.uniq(iterations ,function(i) { return i.get("Name");});
+
+        var plotLineStyle	= { dashStyle: 'dot', color: 'grey', showLabelTitles: showLabelTitles, plotLineType:  plotLineType};
+
+		return this.getPlotLineConfigs(seriesDates, iterations, dateField, plotLineStyle);
     },
 
     //
@@ -717,18 +772,12 @@ Ext.define('CustomApp', {
     // Milestone plot lines can be temporarily removed from the graph by clicking on them.
     //
     getAllPlotLineConfigs: function(seriesDates) {
-        // filter the iterations
-        var start = new Date( Date.parse(seriesDates[0]));
-        var end   = new Date( Date.parse(seriesDates[seriesDates.length-1]));
+        var itPlotLines  = this.getIterationPlotLineConfigs(seriesDates, this.iterationLabels, 'start');
+        var itEPlotLines = this.getIterationPlotLineConfigs(seriesDates, false, 'end');
+        var rePlotLines  = this.getPlotLineConfigs(seriesDates, this.selectedReleases, 'ReleaseDate', { dashStyle: 'dot', color: 'grey'} );
+        var miPlotLines  = this.getMilestonePlotLineConfigs(seriesDates, this.milestoneLabels);
 
-        var iterations = _.filter(this.iterations,function(i) { return i.get("EndDate") >= start && i.get("EndDate") <= end;});
-            iterations = _.uniq(iterations ,function(i) { return i.get("Name");});
-
-        var itPlotLines = this.getPlotLineConfigs(seriesDates, iterations, 'EndDate',                { dashStyle: 'dot', color: 'grey'} );
-        var rePlotLines = this.getPlotLineConfigs(seriesDates, this.selectedReleases, 'ReleaseDate', { dashStyle: 'dot', color: 'grey'} );
-        var miPlotLines = this.getMilestonePlotLineConfigs(seriesDates, true);
-
-        return itPlotLines.concat(rePlotLines).concat(miPlotLines);
+        return itPlotLines.concat(itEPlotLines).concat(rePlotLines).concat(miPlotLines);
     },
 
     showChart : function(series) {
@@ -792,7 +841,6 @@ Ext.define('CustomApp', {
             }
         });
 //        var size = extChart.getSize();
-        console.log('chart size', extChart);
 
         var panel = app.down('#chartPanel');
         panel.add(extChart);

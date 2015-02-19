@@ -45,7 +45,6 @@ Ext.define("MyBurnCalculator", function() {
 
                 return row;
             });
-            console.log('metrics', metrics, self.series);
 
             return metrics;
         },

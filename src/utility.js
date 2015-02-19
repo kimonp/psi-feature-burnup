@@ -91,7 +91,7 @@ function createSeriesArray() {
         { name : "P0StoryPointsProjection",    description : "P0 Scope Projection",  projectOn : "P0 Story Points",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "LightGray" },
         { name : "P0AccPointsProjection", description : "P0 Accepted P0 Projection", projectOn : "P0 Accepted Points",
-            filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "LightGray" },
+            filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "LightGray" }
     ];
 }
 

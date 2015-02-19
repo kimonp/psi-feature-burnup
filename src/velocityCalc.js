@@ -2,6 +2,10 @@ Ext.define("VelocityCalculator", {
     app: null,
     gridPanelId: '#gridPanel',
 
+    storeFields: ['startName', 'endName', 'days', 'acceptVelocity', 'acceptDelta', 'scopeVelocity', 'scopeDelta',
+                    'acceptPoints',
+        	         'segmentVelPerMo', 'segmentVel'],
+
     constructor: function(theApp) {
         this.app = theApp;
 
@@ -16,7 +20,6 @@ Ext.define("VelocityCalculator", {
         var panel  = this.app.down(this.gridPanelId);
 
         if (panel !== null) {
-            console.log('remove oldGrid', panel);
             panel.removeAll();
         }
     },
@@ -34,6 +37,8 @@ Ext.define("VelocityCalculator", {
     addGrids: function(seriesData, milestones, iterations) {
         this.resetPanel();
 
+        this.createDateCollection(seriesData);
+
         this.addGridsToPanel([
         		 this.getOverallVelocityGrid(seriesData),
         		 this.getMilestoneVelocityGrid(seriesData, milestones),
@@ -41,7 +46,15 @@ Ext.define("VelocityCalculator", {
         ]);
     },
 
-    getOverallVelocityGrid: function(seriesData) {
+    calcDoneDate: function(totalPoints, acceptedPoints, avgMoVelocity) {
+        var avgDayVelocity	= avgMoVelocity.match(/^\d+(\.\d+)?$/) ? Math.round(avgMoVelocity/30) : '';
+        var daysToFinish	= avgDayVelocity ? Math.round((totalPoints - acceptedPoints)/avgDayVelocity) : '';
+        var doneDate		= daysToFinish === '' ? 'n/a' : Ext.Date.format(Ext.Date.add(new Date(), Ext.Date.DAY, daysToFinish), 'Y-m-d');
+
+        return doneDate;
+    },
+
+    getOverallStats: function(seriesData, P0) {
         var entryCount 		= seriesData.length - 1;
         var firstEntry		= seriesData[0];
         var lastEntry		= seriesData[entryCount];
@@ -50,39 +63,95 @@ Ext.define("VelocityCalculator", {
         var today			= this.today();
         var compDate		= today < endDate ? today : endDate;
 
-        var startAccPoints	= firstEntry['Accepted Points'];
-        var acceptedPoints	= lastEntry['Accepted Points'];
+        var acceptField		= P0 === true ? 'P0 Accepted Points' : 'Accepted Points';
+        var storyField		= P0 === true ? 'P0 Story Points' : 'Story Points';
+
+        var startAccPoints	= firstEntry[acceptField];
+        var acceptedPoints	= lastEntry[acceptField];
         var curAccPoints	= acceptedPoints - startAccPoints;
-        var totalPoints		= lastEntry['Story Points'];
+        var totalPoints		= lastEntry[storyField];
         var acceptedPct		= totalPoints ? Math.round(curAccPoints/totalPoints*100) + '%' : '-';
         var totalDays	  	= this.subtractDates(endDate, startDate);
         var daysPast	  	= this.subtractDates(compDate, startDate);
         var monthsPast	    = daysPast / 30;
         var daysPct			= totalDays ? Math.round(daysPast/totalDays*100) + '%' : '-';
-        var avgMoVelocity	= monthsPast ? Math.round(curAccPoints/monthsPast) : '-';
+        var avgMoVelocity	= monthsPast ? Math.round(curAccPoints/monthsPast).toString() : '-';
+ //       var avgDayVelocity	= daysPast ? Math.round(curAccPoints/daysPast) : '0';
+//        var daysToFinish	= avgDayVelocity ? Math.round((totalPoints - acceptedPoints)/avgDayVelocity) : '';
+        var doneDate		= this.calcDoneDate(totalPoints, acceptedPoints, avgMoVelocity);
+
+        return {
+            avgMoVelocity:	avgMoVelocity,
+            totalPoints:	totalPoints,
+            acceptedPoints:	acceptedPoints,
+            acceptedPct:	acceptedPct,
+            daysPct:		daysPct,
+            doneDate:		doneDate
+        };
+    },
+
+    getOverallVelocityGrid: function(seriesData) {
+        var totalStats		= this.getOverallStats(seriesData, false);
+        var p0Stats			= this.getOverallStats(seriesData, true);
+
+		var getEditorFunc = function(record) {
+			var edit		= record && record.get('edit');
+			var formType	= 'Ext.form.field.Number';
+			var formConfig	= null;
+
+			return edit === true ? Ext.create('Ext.grid.CellEditor', { field: Ext.create(formType, formConfig)}) : null;
+		};
 
         var stats			= [
-                 { stat: 'Avg. Velocity / Month', value: avgMoVelocity },
-                 { stat: 'Total Points', value: totalPoints },
-                 { stat: 'Accepted Points', value: acceptedPoints },
-                 { stat: 'Accepted % Since Start', value: acceptedPct },
-                 { stat: '% Time Used', value: daysPct }
+                 { stat: 'Avg. Velocity / Month',  value: totalStats.avgMoVelocity,  P0Value: p0Stats.avgMoVelocity, edit: true },
+                 { stat: 'Total Points',           value: totalStats.totalPoints,    P0Value: p0Stats.totalPoints },
+                 { stat: 'Accepted Points',        value: totalStats.acceptedPoints, P0Value: p0Stats.acceptedPoints },
+                 { stat: 'Accepted % Since Start', value: totalStats.acceptedPct,    P0Value: p0Stats.acceptedPct },
+                 { stat: '% Time Used',            value: totalStats.daysPct,		 P0Value: p0Stats.daysPct },
+                 { stat: 'Completion Estimate',    value: totalStats.doneDate,		 P0Value: p0Stats.doneDate }
            ];
         var store	= Ext.create('Ext.data.Store', {
-            	storeId: 'milestoneVelocityStore',
-            	fields: ['stat', 'value'],
+            	storeId: 'overallVelocityStore',
+            	fields: ['stat', 'value', 'P0Value', 'edit'],
                 data: { 'items': stats },
                 proxy: { type: 'memory', reader: { type: 'json', root: 'items' } }
             });
 
+        var that = this;
         var newGrid = Ext.create('Ext.grid.Panel', {
             title: 'Overall Stats',
             itemId: 'velocityStatsGrid',
             store: store,
             columns: [
                       { text: 'Statistic',  dataIndex: 'stat', flex: 200, align: 'right' },
-                      { text: 'Value',      dataIndex: 'value'}
+                      { text: 'All',		dataIndex: 'value', getEditor: getEditorFunc},
+                      { text: 'P0 Only',    dataIndex: 'P0Value', getEditor: getEditorFunc}
             ],
+			plugins: [{
+				ptype: 'cellediting',
+				clicksToEdit: 1,
+                listeners: {
+                    edit: function(editor, e) {
+                        console.log('we were edited', e);
+
+                        if (e.value != e.originalValue) {
+                            var grid	= e.grid;
+                            var field	= e.field;
+                            var models	= grid.getStore().getRange();
+
+                            var totPoints	= models[1].get(field).toString();
+                            var accPoints	= models[2].get(field).toString();
+                            var velocity	= e.value.toString();
+
+                            console.log('calc', totPoints, accPoints, velocity);
+
+                            var doneDate = that.calcDoneDate(totPoints, accPoints, velocity);
+
+                            models[5].set(field, doneDate);
+                        }
+                    }
+                }
+			}],
             width: 400,
             renderTo: Ext.getBody()
         });
@@ -90,17 +159,88 @@ Ext.define("VelocityCalculator", {
         return newGrid;
     },
 
-    getIterationItems: function(seriesData) {
-        return [];
+    //
+    // Create a collection of dates from seriesData so that we can lookup
+    // points by dates;
+    //
+    createDateCollection: function(seriesData) {
+        var dateCollection = {};
+            _.each( seriesData, function(pointData) {
+                var date		= pointData.label;
+
+                dateCollection[date] = pointData;
+            });
+
+        return this.dateCollection = dateCollection;
+    },
+
+    todayPointData: function() {
+        var today = this.today();
+
+        return this.dateCollection[today];
+    },
+
+    addVelocitySegmentEntry: function(items, name, nextName, date, nextDate) {
+        var pointData	  = date && this.dateCollection[date];
+        var nextPointData = nextDate && this.dateCollection[nextDate];
+
+        if (this.dateIsFuture(date)) {
+        	// Skip stuff that has not yet happened
+
+        } else if (pointData && nextPointData) {
+            	if (nextDate > this.today()) { // Truncate to today, if the segment ends after the current date
+                    var todayPointData = this.todayPointData();
+
+                    if (todayPointData) {
+                        nextPointData = this.todayPointData();
+                        nextDate	  = this.today();
+                	}
+            	}
+            var acceptedDiff  = nextPointData['Accepted Points'] - pointData['Accepted Points'];
+            var scopeDiff	  = nextPointData['Story Points'] - pointData['Story Points'];
+            var days	  	  = this.subtractDates(nextDate, date);
+            var months		  = days / 30;
+
+            if (!_.isNaN(acceptedDiff)) {
+                items.push({
+                    startName:		name,
+                    endName:		nextName + ' (' + days + ' days)',
+                    days:			days,
+                    segmentVel:		acceptedDiff - scopeDiff,
+                    segmentVelPerMo:Math.round((acceptedDiff - scopeDiff)/months * 100) / 100,
+
+                    acceptPoints:   acceptedDiff,
+                    acceptDelta:    this.velocityStr(acceptedDiff, months),
+                    scopeDelta:     this.velocityStr(scopeDiff, months),
+                    effectiveVel:   this.velocityStr(acceptedDiff - scopeDiff, months)
+                });
+            }
+        }
+    },
+
+    getIterationItems: function(iterations, seriesData) {
+        var items			= [];
+        var that			= this;
+        var today			= this.today();
+
+        var uniqIterations = _.uniq(_.map(iterations, function(i){ return i.raw;}), 'Name');
+
+        _.each( uniqIterations, function(iteration) {
+            var date	  = iteration.StartDate.replace(/T.*/, '');
+            var nextDate  = iteration.EndDate.replace(/T.*/, '');
+            var name	  = iteration.Name;
+            var nextName  = name;
+
+            that.addVelocitySegmentEntry(items, name, nextName, date, nextDate);
+        });
+        return items;
     },
 
     getIterationVelocityGrid: function(seriesData, iterations) {
-        this.milestones = iterations;
-
-        var items	= this.getIterationItems(seriesData);
+        var items	= this.getIterationItems(iterations, seriesData);
         var store	= Ext.create('Ext.data.Store', {
-            	storeId: 'milestoneVelocityStore',
-            	fields: ['name', 'days', 'acceptVelocity', 'acceptDelta', 'scopeVelocity', 'scopeDelta', 'segmentVelPerMo', 'velocity'],
+            	storeId: 'iterationVelocityStore',
+            	fields: this.storeFields,
                 data: { 'items': items },
                 proxy: { type: 'memory', reader: { type: 'json', root: 'items' } }
             });
@@ -110,10 +250,10 @@ Ext.define("VelocityCalculator", {
             itemId: 'iterationVelocitiesGrid',
             store: store,
             columns: [
-                      { text: 'Iteration',       dataIndex: 'name', flex: 200, align: 'right' },
-                      { text: 'Velocity', dataIndex: 'velocity' },
-                      { text: 'SV / Month', dataIndex: 'segmentVelPerMo' },
-                      { text: 'Accepted Points',     dataIndex: 'acceptDelta', hidden: true},
+                      { text: 'Iteration',       dataIndex: 'endName', flex: 300, align: 'right', hidden: false },
+                      { text: 'Accepted Points',     dataIndex: 'acceptPoints', hidden: false},
+                      { text: 'Effective Velocity', dataIndex: 'segmentVel', hidden: true },
+                      { text: 'EV / Month', dataIndex: 'segmentVelPerMo', hidden: true },
                       { text: 'Scope Change',        dataIndex: 'scopeDelta', hidden: true }
             ],
             width: 400,
@@ -129,7 +269,7 @@ Ext.define("VelocityCalculator", {
         var items	= this.getMilestoneItems(seriesData);
         var store	= Ext.create('Ext.data.Store', {
             	storeId: 'milestoneVelocityStore',
-            	fields: ['startName', 'endName', 'days', 'acceptVelocity', 'acceptDelta', 'scopeVelocity', 'scopeDelta', 'segmentVelPerMo', 'segmentVel'],
+            	fields: this.storeFields,
                 data: { 'items': items },
                 proxy: { type: 'memory', reader: { type: 'json', root: 'items' } }
             });
@@ -191,8 +331,6 @@ Ext.define("VelocityCalculator", {
         var relEndDate 		= end.label; // Date of the end of the release
         var today		   = Ext.Date.format(new Date(), 'Y-m-d');
 
-        console.log('inital milestoneDates', milestoneDates);
-
         var that = this;
         var lastDate		= relStartDate; // Date of the last segment end as we step through them
         _.every( this.milestones.reverse(), function(milestone) {
@@ -226,8 +364,7 @@ Ext.define("VelocityCalculator", {
         var that		= this;
 
         var milestoneDates = this.populateMilestoneSegmentDates(seriesData);
-        var today		   = Ext.Date.format(new Date(), 'Y-m-d');
-        var todayPointData = null;
+
         //
         // Step through the chart series data, and fill in the pointDate information into milestoneDates
         //
@@ -239,9 +376,6 @@ Ext.define("VelocityCalculator", {
             	dateEntry.pointData = _.extend(dateEntry.pointData, pointData);
             }
 
-            if (date == today) {
-                todayPointData = pointData;
-            }
         });
 
         //
@@ -257,32 +391,11 @@ Ext.define("VelocityCalculator", {
 
             } else if (nextDate) {
                 var nextName	  = milestoneDates[nextDate].milestoneList[0].Name;
-                var nextPointData = milestoneDates[nextDate].pointData;
-                	if (nextDate > today && todayPointData) { // Truncate to today, if the segment ends after the current date
-                        nextPointData = todayPointData;
-                        nextDate = today;
-                	}
-                var acceptedDiff  = nextPointData['Accepted Points'] - pointData['Accepted Points'];
-                var scopeDiff	  = nextPointData['Story Points'] - pointData['Story Points'];
-                var days	  	  = that.subtractDates(nextDate, date);
-                var months		  = days / 30;
 
-                _.each( data.milestoneList, function(milestone, date) {
+                _.each( data.milestoneList, function(milestone) {
                     var name = milestone.Name;
 
-                    if (!_.isNaN(acceptedDiff)) {
-                        items.push({
-                            startName:		name,
-                            endName:		nextName + ' (' + days + ' days)',
-                            days:			days,
-                            segmentVel:		acceptedDiff - scopeDiff,
-                            segmentVelPerMo:Math.round((acceptedDiff - scopeDiff)/months * 100) / 100,
-
-                            acceptDelta:    that.velocityStr(acceptedDiff, months),
-                            scopeDelta:     that.velocityStr(scopeDiff, months),
-                            effectiveVel:   that.velocityStr(acceptedDiff - scopeDiff, months)
-                        });
-                    }
+                    that.addVelocitySegmentEntry(items, name, nextName, date, nextDate);
                 });
             }
         });
