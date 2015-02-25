@@ -3,7 +3,7 @@ Ext.define("VelocityCalculator", {
     gridPanelId: '#gridPanel',
 
     storeFields: ['startName', 'endName', 'days', 'acceptVelocity', 'acceptDelta', 'scopeVelocity', 'scopeDelta',
-                    'acceptPoints',
+                    'acceptPoints', 'accPointsPerMo',
         	         'segmentVelPerMo', 'segmentVel'],
 
     constructor: function(theApp) {
@@ -41,8 +41,8 @@ Ext.define("VelocityCalculator", {
 
         this.addGridsToPanel([
         		 this.getOverallVelocityGrid(seriesData),
-        		 this.getMilestoneVelocityGrid(seriesData, milestones),
-        		 this.getIterationVelocityGrid(seriesData, iterations)
+        		 this.getIterationVelocityGrid(seriesData, iterations),
+        		 this.getMilestoneVelocityGrid(seriesData, milestones)
         ]);
     },
 
@@ -104,7 +104,7 @@ Ext.define("VelocityCalculator", {
 
         var stats			= [
                  { stat: 'Avg. Velocity / Month',  value: totalStats.avgMoVelocity,  P0Value: p0Stats.avgMoVelocity, edit: true },
-                 { stat: 'Total Points',           value: totalStats.totalPoints,    P0Value: p0Stats.totalPoints },
+                 { stat: 'Total Points',           value: totalStats.totalPoints,    P0Value: p0Stats.totalPoints, edit: true },
                  { stat: 'Accepted Points',        value: totalStats.acceptedPoints, P0Value: p0Stats.acceptedPoints },
                  { stat: 'Accepted % Since Start', value: totalStats.acceptedPct,    P0Value: p0Stats.acceptedPct },
                  { stat: '% Time Used',            value: totalStats.daysPct,		 P0Value: p0Stats.daysPct },
@@ -139,9 +139,9 @@ Ext.define("VelocityCalculator", {
                             var field	= e.field;
                             var models	= grid.getStore().getRange();
 
+                            var velocity	= models[0].get(field).toString();
                             var totPoints	= models[1].get(field).toString();
                             var accPoints	= models[2].get(field).toString();
-                            var velocity	= e.value.toString();
 
                             console.log('calc', totPoints, accPoints, velocity);
 
@@ -210,6 +210,8 @@ Ext.define("VelocityCalculator", {
                     segmentVelPerMo:Math.round((acceptedDiff - scopeDiff)/months * 100) / 100,
 
                     acceptPoints:   acceptedDiff,
+                    accPointsPerMo: Math.round((acceptedDiff)/months * 100) / 100,
+
                     acceptDelta:    this.velocityStr(acceptedDiff, months),
                     scopeDelta:     this.velocityStr(scopeDiff, months),
                     effectiveVel:   this.velocityStr(acceptedDiff - scopeDiff, months)
@@ -252,8 +254,8 @@ Ext.define("VelocityCalculator", {
             columns: [
                       { text: 'Iteration',       dataIndex: 'endName', flex: 300, align: 'right', hidden: false },
                       { text: 'Accepted Points',     dataIndex: 'acceptPoints', hidden: false},
+                      { text: 'Acc / Month', dataIndex: 'accPointsPerMo', hidden: false },
                       { text: 'Effective Velocity', dataIndex: 'segmentVel', hidden: true },
-                      { text: 'EV / Month', dataIndex: 'segmentVelPerMo', hidden: true },
                       { text: 'Scope Change',        dataIndex: 'scopeDelta', hidden: true }
             ],
             width: 400,
