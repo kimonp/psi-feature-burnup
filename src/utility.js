@@ -40,6 +40,7 @@ function snapshotQuery( config ,callback) {
         autoLoad : true,
         pageSize : 10000,
         limit    : 'Infinity',
+
         listeners : {
             scope : this,
             load  : function(store,snapshots,success) {
@@ -70,6 +71,9 @@ function getDefaultSettings() {
         AcceptedStoryPoints     : true,
         AcceptedPointsProjection: true,
 
+        DefectPoints            : true,
+        AccDefectPoints         : true,
+
         P0StoryPoints           : true,
         P0AccStoryPoints        : true,
         P0StoryPointsProjection : true,
@@ -84,12 +88,18 @@ function createSeriesArray() {
         { name : "AcceptedStoryPoints",      description : "Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "Green" },
         { name : "AcceptedPointsProjection", description : "Accepted Projection", projectOn : "Accepted Points",        color : "LightGray" },
 
+        { name : "DefectPoints" ,           description : "Defect Points",       field : "PlanEstimate",
+            filterField: "c_Type", filterValues: ['DEFECT'], display : "line", f : "filteredSum", color: "Orange" },
+        { name : "AccDefectPoints" ,        description : "Accepted Defect Points",       field : "c_AcceptedPlanEstimate",
+            filterField: "c_Type", filterValues: ['DEFECT'], display : "line", f : "filteredSum", color: "Blue" },
+
         { name : "P0StoryPoints" ,           description : "P0 Points",       field : "LeafStoryPlanEstimateTotal",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "Black" },
         { name : "P0AccStoryPoints" ,           description : "P0 Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "DarkRed" },
         { name : "P0StoryPointsProjection",    description : "P0 Scope Projection",  projectOn : "P0 Points",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "LightGray" },
+
         { name : "P0AccPointsProjection", description : "P0 Accepted P0 Projection", projectOn : "P0 Accepted Points",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "LightGray" }
     ];

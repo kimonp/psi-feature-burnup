@@ -54,6 +54,18 @@ Ext.define("VelocityCalculator", {
         return doneDate;
     },
 
+    calcPct: function(num, total) {
+        var pct	= total ? Math.round(num/total*100) : '-';
+
+        return pct;
+    },
+
+    addPctToNum: function(num, total) {
+        var pct	= this.calcPct(num, total);
+
+        return num + ' (' + pct + '%)';
+    },
+
     getOverallStats: function(seriesData, P0) {
         var entryCount 		= seriesData.length - 1;
         var firstEntry		= seriesData[0];
@@ -64,13 +76,13 @@ Ext.define("VelocityCalculator", {
         var compDate		= today < endDate ? today : endDate;
 
         var acceptField		= P0 === true ? 'P0 Accepted Points' : 'Accepted Points';
-        var storyField		= P0 === true ? 'P0 Story Points' : 'Story Points';
+        var storyField		= P0 === true ? 'P0 Points' : 'Total Points';
 
         var startAccPoints	= firstEntry[acceptField];
         var acceptedPoints	= lastEntry[acceptField];
         var curAccPoints	= acceptedPoints - startAccPoints;
         var totalPoints		= lastEntry[storyField];
-        var acceptedPct		= totalPoints ? Math.round(curAccPoints/totalPoints*100) + '%' : '-';
+        var remainingPoints	= totalPoints - curAccPoints;
         var totalDays	  	= this.subtractDates(endDate, startDate);
         var daysPast	  	= this.subtractDates(compDate, startDate);
         var monthsPast	    = daysPast / 30;
@@ -84,7 +96,7 @@ Ext.define("VelocityCalculator", {
             avgMoVelocity:	avgMoVelocity,
             totalPoints:	totalPoints,
             acceptedPoints:	acceptedPoints,
-            acceptedPct:	acceptedPct,
+            remainingPoints:this.addPctToNum(remainingPoints, totalPoints),
             daysPct:		daysPct,
             doneDate:		doneDate
         };
@@ -106,7 +118,7 @@ Ext.define("VelocityCalculator", {
                  { stat: 'Avg. Velocity / Month',  value: totalStats.avgMoVelocity,  P0Value: p0Stats.avgMoVelocity, edit: true },
                  { stat: 'Total Points',           value: totalStats.totalPoints,    P0Value: p0Stats.totalPoints, edit: true },
                  { stat: 'Accepted Points',        value: totalStats.acceptedPoints, P0Value: p0Stats.acceptedPoints },
-                 { stat: 'Accepted % Since Start', value: totalStats.acceptedPct,    P0Value: p0Stats.acceptedPct },
+                 { stat: 'Remaining Points',       value: totalStats.remainingPoints,P0Value: p0Stats.remainingPoints },
                  { stat: '% Time Used',            value: totalStats.daysPct,		 P0Value: p0Stats.daysPct },
                  { stat: 'Completion Estimate',    value: totalStats.doneDate,		 P0Value: p0Stats.doneDate }
            ];
@@ -142,14 +154,18 @@ Ext.define("VelocityCalculator", {
                             var velocity	= models[0].get(field).toString();
                             var totPoints	= models[1].get(field).toString();
                             var accPoints	= models[2].get(field).toString();
+                            var remPoints	= this.addPctToNum(totPoints-accPoints, totPoints);
 
                             console.log('calc', totPoints, accPoints, velocity);
 
                             var doneDate = that.calcDoneDate(totPoints, accPoints, velocity);
 
-                            models[5].set(field, doneDate);
+                            models[5].set(field, doneDate); // Set new done date
+
+                            models[3].set(field, remPoints); // Set new points remaining
                         }
-                    }
+                    },
+            		scope: this
                 }
 			}],
             width: 400,
@@ -197,7 +213,7 @@ Ext.define("VelocityCalculator", {
                 	}
             	}
             var acceptedDiff  = nextPointData['Accepted Points'] - pointData['Accepted Points'];
-            var scopeDiff	  = nextPointData['Story Points'] - pointData['Story Points'];
+            var scopeDiff	  = nextPointData['Total Points'] - pointData['Total Points'];
             var days	  	  = this.subtractDates(nextDate, date);
             var months		  = days / 30;
 

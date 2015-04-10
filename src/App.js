@@ -53,7 +53,7 @@ Ext.define('CustomApp', {
                     app.removePlotLines('iterationStart');
                     app.addPlotLines('iterationStart', showLabels);
                 }
-            }, {
+            }, /* {
                 xtype: 'rallycheckboxfield',
                 itemId: 'includeDefects',
                 fieldLabel: 'Include Defects',
@@ -63,10 +63,20 @@ Ext.define('CustomApp', {
                 handler: function(checkbox, showLabels) {
                     app.createChart();
                 }
-            }, {
+            }, */ {
                 xtype: 'rallycheckboxfield',
                 itemId: 'showP0s',
                 fieldLabel: 'Show P0s',
+                labelAlign: 'right',
+                margin: 8,
+                value: false,
+                handler: function(checkbox, showLabels) {
+                	app.createAndShowBurnupChart();
+                }
+            }, {
+                xtype: 'rallycheckboxfield',
+                itemId: 'showDefects',
+                fieldLabel: 'Show Defects',
                 labelAlign: 'right',
                 margin: 8,
                 value: false,
@@ -83,7 +93,35 @@ Ext.define('CustomApp', {
                 handler: function(checkbox, showLabels) {
                 	app.createAndShowBurnupChart();
                 }
-           }]
+            }, /*{
+                xtype: 'rallymultiobjectpicker',
+                modelType: 'portfolioitem/feature',
+//                itemId: 'test',
+               fieldLabel: 'Select Features',
+                labelAlign: 'right',
+                margin: 8jjjjjj,
+                text: "Select Portfolio Items",
+     //           handler: function(checkbox, showLabels) {
+      //          	console.log('selected', checkbox, showLabels);
+       //         },
+                storeConfig: {
+                    filters: [{
+                        property: 'Name',
+                        operator: '=',
+                        value: 'IME 1.0'
+                    }]
+                },
+
+                menu: [
+                       {
+                           text: 'Hello',
+                           xtype: 'menucheckitem'
+                       }, {
+                           text: 'Bye',
+                           xtype: 'menucheckitem'
+                       }
+                ],
+           }*/]
 
         }, {
             xtype: 'panel',
@@ -112,8 +150,9 @@ Ext.define('CustomApp', {
 
     milestoneLabels: function() { return this.getCheckboxValue('milestoneLabels'); },
     iterationLabels: function() { return this.getCheckboxValue('iterationLabels'); },
-    includeDefects:  function() { return this.getCheckboxValue('includeDefects'); },
+    includeDefects:  function() { return !this.getSpecificFeatureIds(); }, // this.getCheckboxValue('includeDefects')); }, // Don't include defects if we are  listing features
     showP0s:		 function() { return this.getCheckboxValue('showP0s'); },
+    showDefects:	 function() { return this.getCheckboxValue('showDefects'); },
     showProjections: function() { return this.getCheckboxValue('showProjections'); },
     onlyP0s:		 function() { return false; }, // Used to be a checkbox, but now since we have the P0 lines as well, no longer needed
 
@@ -126,8 +165,65 @@ Ext.define('CustomApp', {
         this.createChart();
     },
 
+	getTestPicker: function() {
+		Ext.Loader.setConfig({ enabled: true });
+		Ext.Loader.setPath('Ext.ux', '/ux');
+		var store = Ext.create('Ext.data.Store', {
+				fields: ['id', 'type'],
+				data:
+				[
+					{id: '1', type: 'option one'},
+					{id: '2', type: 'option two'},
+					{id: '3', type: 'option three'},
+					{id: '4', type: 'option four'},
+					{id: '5', type: 'option five'},
+					{id: '6', type: 'option six'},
+					{id: '7', type: 'option seven'}
+				]
+			});
+
+		return {
+			xtype: 'rallymultiobjectpicker',
+			fieldLabel: 'Include In Burnup:',
+			labelAlign: 'right',
+			rowSelectable: true,
+			margin: 8,
+			listCfg:  {selModel: {mode: 'SIMPLE'}, displayField: "type", pageSize: 0, autoScroll: true, cls: 'rui-multi-object-list'},
+            store: store,
+            /*
+			storeConfig: {
+				context: this._getScopeLimitedContext(),
+				sorters: [{ // does not seem to work...
+						property: 'ReleaseDate',
+						direction: 'ASC'
+					}],
+				listeners: {
+					load: setCheckboxesFromPrefs,
+					scope: this
+				}
+			},
+            */
+			listeners: {
+//				added:				function(picker) { this.releasePicker = picker; },
+//				selectionchange:	recordSelectionAsReleaseFilters,
+//				blur:				setCardboardFiltersFromPrefs,
+
+				scope:				this
+			},
+//			modelType: 'release',
+//			renderTo: Ext.getBody().dom
+		};
+	},
+
     launch: function() {
 		this.velocityCalc = new VelocityCalculator(this);
+
+        /*
+        var picker = this.getTestPicker();
+        var panel	= this.down('#topPanel');
+
+        panel.add(picker);
+        */
     }, // No launch function currently needed: createChart is triggered when a release is ready or selected
 
     // switch to app configuration from ui selection
@@ -150,6 +246,10 @@ Ext.define('CustomApp', {
                 name: 'epicIds',
                 xtype: 'rallytextfield',
                 label : "(Optional) List of Parent PortfolioItem (Epics) ids to filter Features by"
+            }, {
+                name: 'featureIds',
+                xtype: 'rallytextfield',
+                label : "(Optional) List of PortfolioItem ids to exclusively show"
             }, {
                 name: 'ignoreZeroValues',
                 xtype: 'rallycheckboxfield',
@@ -175,6 +275,7 @@ Ext.define('CustomApp', {
         app.configReleases   = app.getSetting("releases") || app.defaultRelease;
         app.ignoreZeroValues = app.getSetting("ignoreZeroValues");
         app.epicIds          = app.getSetting("epicIds");
+        app.featureIds       = app.getSetting("featureIds");
 
         if (app.configReleases === "") {
             this.resetChart("Please Configure this app by selecting Edit App Settings from Configure (gear) Menu");
@@ -404,6 +505,7 @@ Ext.define('CustomApp', {
         app.executeFeatureQuery(filter);
     },
 
+    // No longer used
     queryFeatures : function() {
         var filter = null;
         var releaseNames = _.uniq(_.map(app.releases,function(r){ return r.get("Name");}));
@@ -422,25 +524,86 @@ Ext.define('CustomApp', {
         app.executeFeatureQuery(filter);
     },
 
-    queryFeatureSnapshots : function () {
-        var ids = _.pluck(app.features, function(feature) { return feature.get("ObjectID");} );
+    //
+    // User can choose to limit the feature ids
+    // from which the burnup is created
+    //
+    getSpecificFeatureIds: function() {
+        var featureIds = app.featureIds && app.featureIds.split(",");
+
+//        featureIds = ['F1020'];
+
+        return featureIds;
+    },
+
+    getSnapshotFilters: function(type) {
+        // var ids = _.pluck(app.features, function(feature) { return feature.get("ObjectID");} );
         // var pes = _.pluck(app.features, function(feature) { return feature.get("PreliminaryEstimate");} );
-        var extent = app.getReleaseExtent(app.releases);
         // console.log("ids",ids,pes);
+
+        var extent = app.getReleaseExtent(app.releases);
         var relIDs = _.map(app.releases, function (release) { return release.data.ObjectID; });
-        var find = {
-//                'ObjectID' : { "$in" : ids },
-                '_TypeHierarchy' : { "$in" : [app.featureType] },
-                'Release': { "$in" : relIDs },
-                '_ValidTo' : { "$gte" : extent.isoStart }
+        var filters;
+
+        if (type === 'defect') {
+            filters = {
+                '_TypeHierarchy': { "$in" : ["Defect"] },
+                'Release':		  { "$in" : relIDs },
+                'PlanEstimate':   { "$gt" : 0 },
+                '_ValidTo':		  { "$gte" : extent.isoStart }
             };
 
-            if (app.onlyP0s()) {
-                find.c_Priority = { "$in": ['P0']};
+        } else {
+            filters = {
+                    '_TypeHierarchy': { "$in" : [app.featureType] },
+                    'Release': 		  { "$in" : relIDs },
+                    '_ValidTo':	      { "$gte" : extent.isoStart }
+                };
+
+
+            // If the feature has chosen to view certain featureIDs, find those; otherwise get all associated with the
+            // matching release Ids
+            var featureIds = this.getSpecificFeatureIds();
+
+            if (featureIds) {
+                filters.FormattedID = { "$in" : featureIds };
+            } else {
+                filters.Release     = { "$in" : relIDs };
             }
 
+            if (app.onlyP0s()) {
+                filters.c_Priority = { "$in": ['P0']};
+            }
+        }
+
+        return filters;
+    },
+
+    queryFeatureSnapshots : function () {
+        var defectStoreFilters  = this.getSnapshotFilters('defect');
+
+        var defectStoreConfig = {
+            find: defectStoreFilters,
+            autoLoad : true,
+            pageSize: 1000,
+            limit: 'Infinity',
+            fetch: ['PlanEstimate', 'ScheduleState'],
+            hydrate: ['ScheduleState'],
+            listeners: {
+                load: function(store, snapshots, success) {
+                    console.log("Loaded:"+snapshots.length," Defects snapshots", success);
+
+                    if (success === false) {
+                        Rally.ui.notify.Notifier.show({message: "Failed to load defect data"});
+                    }
+                    app.gotSnapshotData('defects', snapshots);
+                }
+            }
+        };
+
+        var featureStoreFilters = this.getSnapshotFilters('feature');
         var featureStoreConfig = {
-            find : find,
+            find : featureStoreFilters,
             autoLoad : true,
             pageSize:1000,
             limit: 'Infinity',
@@ -452,42 +615,24 @@ Ext.define('CustomApp', {
 
 //        console.log('releases', _.map(app.releases, function (release) { return release.data.ObjectID; }));
 
-        var defectStoreConfig = {
-            find: {
-                '_TypeHierarchy': { "$in" : ["Defect"] },
-                'Release': { "$in" : relIDs },
-                'PlanEstimate': { "$gt" : 0 },
-                '_ValidTo': { "$gte" : extent.isoStart }
-            },
-            autoLoad : true,
-            pageSize: 1000,
-            limit: 'Infinity',
-            fetch: ['PlanEstimate', 'ScheduleState'],
-            hydrate: ['ScheduleState'],
-            listeners: {
-                load: function(store, snapshots, success) {
-                console.log("Loaded:"+snapshots.length," Defects snapshots");
-
-                    app.gotSnapshotData('defects', snapshots);
-                }
-            }
-        };
-
         featureStoreConfig.listeners = {
             scope : this,
             load: function(store, snapshots, success) {
-                console.log("Loaded:"+snapshots.length," Feature Snapshots.");
+                console.log("Loaded:"+snapshots.length," Feature Snapshots.", success);
 
+                if (success === false) {
+                    Rally.ui.notify.Notifier.show({message: "Failed to load user story data"});
+                }
                 app.gotSnapshotData('features', snapshots);
             }
         };
 
         if (!this.featureSnapshots) {
-            console.log("Querying for feature snapshots");
+            console.log("Querying for feature snapshots", featureStoreConfig.find);
             Ext.create('Rally.data.lookback.SnapshotStore', featureStoreConfig);
         }
         if (this.includeDefects()) {
-            console.log("Querying for defects snapshots");
+            console.log("Querying for defects snapshots", defectStoreConfig.find);
             Ext.create('Rally.data.lookback.SnapshotStore', defectStoreConfig);
         }
     },
@@ -502,7 +647,12 @@ Ext.define('CustomApp', {
             defect.data.LeafStoryPlanEstimateTotal = defect.data.PlanEstimate;
 
             defect.data.c_Priority = 'P0'; // Defects all considered P0
+            defect.data.c_Type = 'DEFECT'; // Identify as a defect
+
             defect.data.AcceptedLeafStoryPlanEstimateTotal =
+                defect.data.ScheduleState === 'Accepted' ? defect.data.PlanEstimate : 0;
+
+            defect.data.c_AcceptedPlanEstimate =
                 defect.data.ScheduleState === 'Accepted' ? defect.data.PlanEstimate : 0;
         });
 
@@ -524,6 +674,7 @@ Ext.define('CustomApp', {
     },
 
     createAndShowBurnupChart : function () {
+//        console.log('createChart', app, app.featureSnapshots, app.defectSnapshots);
         var snapshots    = this.includeDefects() && app.defectSnapshots ?
                             app.featureSnapshots.concat(app.defectSnapshots) : app.featureSnapshots;
         var lumenize     = window.parent.Rally.data.lookback.Lumenize;
@@ -567,6 +718,9 @@ Ext.define('CustomApp', {
 
                 if (desc.match('P0') && !app.showP0s()) {
                     // skip
+                } else if (desc.match('Defect') && !app.showDefects()) {
+                    // skip
+
                 } else if (desc.match('Projection') && !app.showProjections()) {
                     // skip
                 } else {
@@ -626,8 +780,8 @@ Ext.define('CustomApp', {
     // plotLineStyle: Style of the plot line to be passed to highcharts.  Also contains several special fields that we interpret here
     //
     //                 showLabel: Label the plotline as the name of the record it represents (e.g. Milestone Name)
-    //              plotLineType: 'milestone' can be removed by clicking and have special labels
-    //                            'iterationStart' has labels
+    //              plotLineType: 'milestone' and 'iterationStart' have special labels
+    //							  'iterationEnd' has no labels
     //                     color: Enter an explit color, otherwise it will try to lookup the DisplayColor of the object (works for Milestones),
     //                            else it will default to grey
     //
@@ -789,6 +943,10 @@ Ext.define('CustomApp', {
 
         // set the tick interval
         var tickInterval = series[1].data.length <= (7*20) ? 7 : (series[1].data.length / 20);
+        var fids = app.getSpecificFeatureIds();
+        var title = fids ? "Limited to features: " + fids.join(', ') : ' ';
+
+        console.log('title', title);
 
         var extChart = Ext.create('Rally.ui.chart.Chart', {
             columnWidth : 1,
@@ -803,7 +961,7 @@ Ext.define('CustomApp', {
             chartConfig : {
                 chart: { },
                 title: {
-                    text: ' ', // Leave it blank...could be "Release Burnup", or the name of the project/release
+                    text: title,
                     x: -20 //center
                 },
                 plotOptions: {
