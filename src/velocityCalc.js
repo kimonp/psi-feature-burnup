@@ -78,10 +78,10 @@ Ext.define("VelocityCalculator", {
         var acceptField		= P0 === true ? 'P0 Accepted Points' : 'Accepted Points';
         var storyField		= P0 === true ? 'P0 Points' : 'Total Points';
 
-        var startAccPoints	= firstEntry[acceptField];
-        var acceptedPoints	= lastEntry[acceptField];
+        var startAccPoints	= Math.round(firstEntry[acceptField]);
+        var acceptedPoints	= Math.round(lastEntry[acceptField]);
         var curAccPoints	= acceptedPoints - startAccPoints;
-        var totalPoints		= lastEntry[storyField];
+        var totalPoints		= Math.round(lastEntry[storyField]);
         var remainingPoints	= totalPoints - curAccPoints;
         var totalDays	  	= this.subtractDates(endDate, startDate);
         var daysPast	  	= this.subtractDates(compDate, startDate);
@@ -222,11 +222,11 @@ Ext.define("VelocityCalculator", {
                     startName:		name,
                     endName:		nextName + ' (' + days + ' days)',
                     days:			days,
-                    segmentVel:		acceptedDiff - scopeDiff,
-                    segmentVelPerMo:Math.round((acceptedDiff - scopeDiff)/months * 100) / 100,
+                    segmentVel:		Math.round(acceptedDiff - scopeDiff),
+                    segmentVelPerMo:months ? Math.round((acceptedDiff - scopeDiff)/months * 100) / 100 : '-',
 
-                    acceptPoints:   acceptedDiff,
-                    accPointsPerMo: Math.round((acceptedDiff)/months * 100) / 100,
+                    acceptPoints:   Math.round(acceptedDiff),
+                    accPointsPerMo: months ? Math.round((acceptedDiff)/months * 100) / 100 : '-',
 
                     acceptDelta:    this.velocityStr(acceptedDiff, months),
                     scopeDelta:     this.velocityStr(scopeDiff, months),
@@ -241,7 +241,7 @@ Ext.define("VelocityCalculator", {
         var that			= this;
         var today			= this.today();
 
-        var uniqIterations = _.uniq(_.map(iterations, function(i){ return i.raw;}), 'Name');
+        var uniqIterations = _.sortBy(_.uniq(_.map(iterations, function(i){ return i.raw;}), 'Name'), 'StartDate');
 
         _.each( uniqIterations, function(iteration) {
             var date	  = iteration.StartDate.replace(/T.*/, '');

@@ -9,6 +9,296 @@
 
     <script type="text/javascript">
         Rally.onReady(function () {
+                Ext.define('Ext.ux.CheckCombo',
+{
+    extend: 'Ext.form.field.ComboBox',
+    alias: 'widget.checkcombo',
+    multiSelect: true,
+    allSelector: false,
+    noData: false,
+    noDataText: 'No combo data',
+    addAllSelector: false,
+    allSelectorHidden: false,
+    enableKeyEvents: true,
+    afterExpandCheck: false,
+    allText: 'All',
+    oldValue: '',
+    listeners:
+    {
+/* uncomment if you want to reload store on every combo expand
+        beforequery: function(qe)
+        {
+            this.store.removeAll();
+            delete qe.combo.lastQuery;
+        },
+*/
+        focus: function(cpt)
+        {
+            cpt.oldValue = cpt.getValue();
+        },
+        keydown: function(cpt, e, eOpts)
+        {
+            var    value = cpt.getRawValue(),
+                oldValue = cpt.oldValue;
+
+            if(value != oldValue) cpt.setValue('');
+        }
+    },
+    createPicker: function()
+    {
+        var    me = this,
+            picker,
+            menuCls = Ext.baseCSSPrefix + 'menu',
+            opts = Ext.apply(
+            {
+                pickerField: me,
+                selModel:
+                {
+                    mode: me.multiSelect ? 'SIMPLE' : 'SINGLE'
+                },
+                floating: true,
+                hidden: true,
+                ownerCt: me.ownerCt,
+                cls: me.el.up('.' + menuCls) ? menuCls : '',
+                store: me.store,
+                displayField: me.displayField,
+                focusOnToFront: false,
+                pageSize: me.pageSize,
+                tpl:
+                [
+                    '<ul><tpl for=".">',
+                        '<li role="option" class="' + Ext.baseCSSPrefix + 'boundlist-item yes-harmonized rui-multi-object-picker"><span class="x-combo-checker">&nbsp;</span> {' + me.displayField + '}</li>',
+                    '</tpl></ul>'
+                ]
+            }, me.listConfig, me.defaultListConfig);
+
+
+        picker = me.picker = Ext.create('Ext.view.BoundList', opts);
+        if(me.pageSize)
+        {
+            picker.pagingToolbar.on('beforechange', me.onPageChange, me);
+        }
+
+
+        me.mon(picker,
+        {
+            itemclick: me.onItemClick,
+            refresh: me.onListRefresh,
+            scope: me
+        });
+
+
+        me.mon(picker.getSelectionModel(),
+        {
+            'beforeselect': me.onBeforeSelect,
+            'beforedeselect': me.onBeforeDeselect,
+            'selectionchange': me.onListSelectionChange,
+            scope: me
+        });
+
+
+        me.store.on('load', function(store)
+        {
+            if(store.getTotalCount() == 0)
+            {
+                me.allSelectorHidden = true;
+                if(me.allSelector != false) me.allSelector.setStyle('display', 'none');
+                if(me.noData != false) me.noData.setStyle('display', 'block');
+            }
+            else
+            {
+                me.allSelectorHidden = false;
+                if(me.allSelector != false) me.allSelector.setStyle('display', 'block');
+                if(me.noData != false) me.noData.setStyle('display', 'none');
+            }
+        });
+
+
+        return picker;
+    },
+    reset: function()
+    {
+        var    me = this;
+
+
+        me.setValue('');
+    },
+    setValue: function(value)
+    {
+        this.value = value;
+        if(!value)
+        {
+            if(this.allSelector != false) this.allSelector.removeCls('rui-picker-cb-checked');
+            return this.callParent(arguments);
+        }
+
+
+        if(typeof value == 'string') {
+            var    me = this,
+                records = [],
+                vals = value.split(',');
+
+
+            if(value == '')
+            {
+                if(me.allSelector != false) me.allSelector.removeCls('rui-picker-cb-checked');
+            }
+            else
+            {
+                if(vals.length == me.store.getCount() && vals.length != 0)
+                {
+                    if(me.allSelector != false) me.allSelector.addCls('rui-picker-cb-checked');
+                    else me.afterExpandCheck = true;
+                }
+            }
+
+
+            Ext.each(vals, function(val)
+            {
+                var record = me.store.getById(parseInt(val));
+                if(record) records.push(record);
+            });
+
+
+            return me.setValue(records);
+        }
+        else return this.callParent(arguments);
+    },
+    getValue: function()
+    {
+        if(typeof this.value == 'object') return this.value.join(',');
+        else return this.value;
+    },
+    getSubmitValue: function()
+    {
+        return this.getValue();
+    },
+    expand: function()
+    {
+        var    me = this,
+            bodyEl, picker, collapseIf;
+
+
+            if(me.rendered && !me.isExpanded && !me.isDestroyed)
+            {
+            bodyEl = me.bodyEl;
+            picker = me.getPicker();
+            collapseIf = me.collapseIf;
+
+
+            // show the picker and set isExpanded flag
+            picker.show();
+            me.isExpanded = true;
+            me.alignPicker();
+            bodyEl.addCls(me.openCls);
+
+
+            if(me.noData == false) me.noData = picker.getEl().down('.x-boundlist-list-ct').insertHtml('beforeBegin', '<div class="x-boundlist-item yes-harmonized rui-multi-object-picker" role="option">'+me.noDataText+'</div>', true);
+
+
+            if(me.addAllSelector == true && me.allSelector == false)
+            {
+                me.allSelector = picker.getEl().down('.x-boundlist-list-ct').insertHtml('beforeBegin', '<div class="x-boundlist-item yes-harmonized rui-multi-object-picker" role="option"><span class="x-combo-checker">&nbsp;</span> '+me.allText+'</div>', true);
+                me.allSelector.on('click', function(e)
+                {
+                console.log('all click func');
+                    if(me.allSelector.hasCls('rui-picker-cb-checked'))
+                    {
+                        me.allSelector.removeCls('rui-picker-cb-checked');
+                        me.setValue('');
+                        me.fireEvent('select', me, []);
+                    } else {
+                        var records = [];
+                        me.store.each(function(record)
+                        {
+                            records.push(record);
+                        });
+                        me.allSelector.addCls('rui-picker-cb-checked');
+                        me.select(records);
+                        me.fireEvent('select', me, records);
+                    }
+                });
+
+                if(me.allSelectorHidden == true) me.allSelector.hide();
+                else me.allSelector.show();
+
+                if(me.afterExpandCheck == true)
+                {
+                    me.allSelector.addCls('rui-picker-cb-checked');
+                    me.afterExpandCheck = false;
+                }
+            }
+
+
+            // monitor clicking and mousewheel
+            me.mon(Ext.getDoc(),
+            {
+                mousewheel: collapseIf,
+                mousedown: collapseIf,
+                scope: me
+            });
+            Ext.EventManager.onWindowResize(me.alignPicker, me);
+            me.fireEvent('expand', me);
+            me.onExpand();
+        }
+        else
+        {
+            me.fireEvent('expand', me);
+            me.onExpand();
+        }
+    },
+    alignPicker: function()
+    {
+        var me = this,
+            picker = me.getPicker();
+
+
+        me.callParent();
+
+        if(me.addAllSelector == true)
+        {
+            var height = picker.getHeight();
+            height = parseInt(height)+20;
+            picker.setHeight(height);
+            picker.getEl().setStyle('height', height+'px');
+        }
+    },
+
+    onListSelectionChange: function(list, selectedRecords) {
+        var me = this,
+            isMulti = me.multiSelect,
+            hasRecords = selectedRecords.length > 0;
+
+        // Only react to selection if it is not called from setValue, and if our list is
+        // expanded (ignores changes to the selection model triggered elsewhere)
+        if (!me.ignoreSelection && me.isExpanded) {
+            if (!isMulti) {
+                Ext.defer(me.collapse, 1, me);
+            }
+            /*
+            * Only set the value here if we're in multi selection mode or we have
+            * a selection. Otherwise setValue will be called with an empty value
+            * which will cause the change event to fire twice.
+            */
+            if (isMulti || hasRecords) {
+                me.setValue(selectedRecords, false);
+            }
+            if (hasRecords) {
+                me.fireEvent('select', me, selectedRecords);
+            }
+            me.inputEl.focus();
+
+            if (me.addAllSelector == true && me.allSelector != false) {
+                if(selectedRecords.length == me.store.getTotalCount()) {
+                	me.allSelector.addCls('rui-picker-cb-checked');
+
+                } else {
+                	me.allSelector.removeCls('rui-picker-cb-checked');
+                }
+            }
+        }
+    }
+});
                 // utility methods
 
 // returns the release name if the app is on a page scoped to a release.
@@ -51,6 +341,7 @@ function snapshotQuery( config ,callback) {
         autoLoad : true,
         pageSize : 10000,
         limit    : 'Infinity',
+
         listeners : {
             scope : this,
             load  : function(store,snapshots,success) {
@@ -81,6 +372,9 @@ function getDefaultSettings() {
         AcceptedStoryPoints     : true,
         AcceptedPointsProjection: true,
 
+        DefectPoints            : true,
+        AccDefectPoints         : true,
+
         P0StoryPoints           : true,
         P0AccStoryPoints        : true,
         P0StoryPointsProjection : true,
@@ -90,17 +384,23 @@ function getDefaultSettings() {
 
 function createSeriesArray() {
     return [
-        { name : "StoryPoints" ,             description : "Story Points",          field : "LeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "DarkGray" },
-        { name : "StoryPointsProjection",    description : "Scope Projection",  projectOn : "Story Points", color : "LightGray" },
+        { name : "StoryPoints" ,             description : "Total Points",          field : "LeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "DarkGray" },
+        { name : "StoryPointsProjection",    description : "Scope Projection",  projectOn : "Total Points", color : "LightGray" },
         { name : "AcceptedStoryPoints",      description : "Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal", display : "line", f : "sum", color : "Green" },
         { name : "AcceptedPointsProjection", description : "Accepted Projection", projectOn : "Accepted Points",        color : "LightGray" },
 
-        { name : "P0StoryPoints" ,           description : "P0 Story Points",       field : "LeafStoryPlanEstimateTotal",
+        { name : "DefectPoints" ,           description : "Defect Points",       field : "PlanEstimate",
+            filterField: "c_Type", filterValues: ['DEFECT'], display : "line", f : "filteredSum", color: "Orange" },
+        { name : "AccDefectPoints" ,        description : "Accepted Defect Points",       field : "c_AcceptedPlanEstimate",
+            filterField: "c_Type", filterValues: ['DEFECT'], display : "line", f : "filteredSum", color: "Blue" },
+
+        { name : "P0StoryPoints" ,           description : "P0 Points",       field : "LeafStoryPlanEstimateTotal",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "Black" },
         { name : "P0AccStoryPoints" ,           description : "P0 Accepted Points",       field : "AcceptedLeafStoryPlanEstimateTotal",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "DarkRed" },
-        { name : "P0StoryPointsProjection",    description : "P0 Scope Projection",  projectOn : "P0 Story Points",
+        { name : "P0StoryPointsProjection",    description : "P0 Scope Projection",  projectOn : "P0 Points",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "LightGray" },
+
         { name : "P0AccPointsProjection", description : "P0 Accepted P0 Projection", projectOn : "P0 Accepted Points",
             filterField: "c_Priority", filterValues: ['P0'], display : "line", f : "filteredSum", color: "LightGray" }
     ];
@@ -214,7 +514,7 @@ Ext.define('CustomApp', {
                     app.removePlotLines('iterationStart');
                     app.addPlotLines('iterationStart', showLabels);
                 }
-            }, {
+            }, /* {
                 xtype: 'rallycheckboxfield',
                 itemId: 'includeDefects',
                 fieldLabel: 'Include Defects',
@@ -224,10 +524,20 @@ Ext.define('CustomApp', {
                 handler: function(checkbox, showLabels) {
                     app.createChart();
                 }
-            }, {
+            }, */ {
                 xtype: 'rallycheckboxfield',
                 itemId: 'showP0s',
                 fieldLabel: 'Show P0s',
+                labelAlign: 'right',
+                margin: 8,
+                value: false,
+                handler: function(checkbox, showLabels) {
+                	app.createAndShowBurnupChart();
+                }
+            }, {
+                xtype: 'rallycheckboxfield',
+                itemId: 'showDefects',
+                fieldLabel: 'Show Defects',
                 labelAlign: 'right',
                 margin: 8,
                 value: false,
@@ -244,7 +554,104 @@ Ext.define('CustomApp', {
                 handler: function(checkbox, showLabels) {
                 	app.createAndShowBurnupChart();
                 }
-           }]
+            }, {
+                xtype: 'rallybutton',
+                itemId: 'selectFeatureButton',
+                labelAlign: 'right',
+                margin: 8,
+                text: "Select Components",
+                listeners: {
+                    menuhide: function(button, event, eOpts) {
+                        app.displayFeatureSelection();
+                    },
+                    click: function(button, event, eOpts) {
+                    	if (!app.featureRecords) {
+                            var release = app.releases && app.releases[0];
+                            var relName = release && release.get('Name');
+
+                            button.menu.setLoading(true);
+
+                            app.featureToNameMap = {};
+
+                            var config = {
+                                model  : app.featureType,
+                                fetch  : ['Name', 'FormattedID'],
+                                filters: [{
+                                    property: 'Release.Name',
+                                    operator: '=',
+                                    value: relName
+                                }]
+                            };
+                            app.wsapiQuery(config, function(err, featureRecords) {
+                                _(featureRecords).forEach(function(featureRecord) {
+                                    var name = featureRecord.get('Name');
+                                    var id	 = featureRecord.get('FormattedID');
+
+                                    app.featureToNameMap[id] = name;
+
+                                    button.menu.add({ text: id + ': ' + name, xtype: 'menucheckitem', value: id, checked: true,
+                                        	listeners: {
+                                            	checkHandler: function(checkbox) {
+                                                    if (checkbox.checked) {
+                                                        app.setCheckbox('selectNone', false);
+                                                    } else {
+                                                        app.setCheckbox('selectAll', false);
+                                                    }
+                                                }
+                                            }
+                                    	});
+                                });
+
+                                app.featureRecords = featureRecords;
+                                button.menu.setLoading(false);
+                            });
+                    	}
+                    }
+
+                },
+
+                menu: [
+                       {
+                           xtype: 'menucheckitem',
+                           text: 'Select All',
+                           itemId: 'selectAll',
+                           checked: true,
+                           handler: function(checkbox) {
+                                var checked	= checkbox.checked;
+
+                                if (checked) {
+                                    app.setAllInSelectMenu(true);
+                                }
+                           }
+                       }, {
+                           xtype: 'menucheckitem',
+                           text: 'Select None',
+                           itemId: 'selectNone',
+                           handler: function(checkbox) {
+                                var checked	= checkbox.checked;
+
+                                if (checked) {
+                                    app.setAllInSelectMenu(false);
+                                }
+                           }
+                       }, { xtype: 'menuseparator' }, {
+                           xtype: 'menucheckitem',
+                           text: 'Include Defects',
+                           itemId: 'includeDefects',
+                           handler: function(checkbox) {
+                                var checked	= checkbox.checked;
+
+                                if (checked) {
+                                    app.setCheckbox('selectNone', false);
+                                } else {
+                                    app.setCheckbox('selectAll', false);
+                                }
+                           },
+                           checked: true
+                       }, { xtype: 'menuseparator' }
+                ],
+            },
+           ]
 
         }, {
             xtype: 'panel',
@@ -265,30 +672,175 @@ Ext.define('CustomApp', {
         }
     ],
 
+    //
+    // Once the user has changed the selection of burnup features and defects, display that
+    //
+    displayFeatureSelection: function() {
+        var button				= app.down('#selectFeatureButton');
+        var menuItems			= button.menu.items.items;
+        var selectedFeatures	= [];
+        var ignoredFeatures		= [];
+
+        _(menuItems).forEach(function(menuItem) {
+            if (menuItem.value && menuItem.checked) {
+                selectedFeatures.push(menuItem.value);
+
+            } else if (menuItem.value && !menuItem.checked) {
+                ignoredFeatures.push(menuItem.value);
+            }
+        });
+
+        app.selectedFeatures = selectedFeatures;
+        app.ignoredFeatures	 = ignoredFeatures;
+
+        app.createAndShowBurnupChart();
+    },
+
+    //
+    // Feature selection is the widget that selects particular features to display in the burndown.
+    // If it is null, then that means display all features in the release, which is the default display.
+    //
+    resetFeatureSelection: function () {
+        this.selectedFeatures = null;
+        this.ignoredFeatures = null;
+
+        this.featureRecords = null;
+    },
+
+    allFeaturesSelected: function() {
+        var button		= app.down('#selectFeatureButton');
+    	var menu		= button.menu;
+        var allSelected = true;
+
+    	_(menu.items.items).forEach(function(menuItem) {
+            if (menuItem.value && menuItem.checked == false) {
+                allSelected = false;
+            }
+    	});
+
+        return allSelected;
+    },
+
+    //
+    // Check all the boxes in the feature select menu
+    //
+    setAllInSelectMenu: function(selectValue) {
+        var button	= app.down('#selectFeatureButton');
+    	var menu	= button.menu;
+
+        // console.log(menu);
+
+    	_(menu.items.items).forEach(function(menuItem) {
+            var text = menuItem.text;
+
+           //  console.log(text, menuItem);
+
+            if (menuItem.xtype == 'menuseparator') {
+                // Probably the separator
+
+            } else if (text == 'Select None') {
+                if (selectValue) {
+                    menuItem.setChecked(false);
+                }
+            } else {
+                menuItem.setChecked(selectValue);
+            }
+    	});
+    },
+
     getCheckboxValue: function(checkBoxId) {
         var checkbox = this.down('#' + checkBoxId);
 
-        return checkbox.value;
+        // console.log(checkBoxId, checkbox);
+
+        return checkbox.checked;
+    },
+
+    setCheckbox: function(checkBoxId, value) {
+        var checkbox = this.down('#' + checkBoxId);
+
+        checkbox.setChecked(value);
     },
 
     milestoneLabels: function() { return this.getCheckboxValue('milestoneLabels'); },
     iterationLabels: function() { return this.getCheckboxValue('iterationLabels'); },
-    includeDefects:  function() { return this.getCheckboxValue('includeDefects'); },
     showP0s:		 function() { return this.getCheckboxValue('showP0s'); },
+    showDefects:	 function() { return this.getCheckboxValue('showDefects'); },
     showProjections: function() { return this.getCheckboxValue('showProjections'); },
     onlyP0s:		 function() { return false; }, // Used to be a checkbox, but now since we have the P0 lines as well, no longer needed
+
+    includeDefects:  function() { return this.getCheckboxValue('includeDefects'); }, // Don't include defects if we are  listing features
 
     // Called when the release combo box is ready or selected.  This triggers the building of the chart.
     setSelectedRelease: function(releaseCombo) {
         var releaseName = releaseCombo.getRecord().data.Name;
         this.defaultRelease = releaseName;
 
+        this.resetFeatureSelection();
+
         this.resetData();
         this.createChart();
     },
 
+	getTestPicker: function() {
+		Ext.Loader.setConfig({ enabled: true });
+		Ext.Loader.setPath('Ext.ux', '/ux');
+		var store = Ext.create('Ext.data.Store', {
+				fields: ['id', 'type'],
+				data:
+				[
+					{id: '1', type: 'option one'},
+					{id: '2', type: 'option two'},
+					{id: '3', type: 'option three'},
+					{id: '4', type: 'option four'},
+					{id: '5', type: 'option five'},
+					{id: '6', type: 'option six'},
+					{id: '7', type: 'option seven'}
+				]
+			});
+
+		return {
+			xtype: 'rallymultiobjectpicker',
+			fieldLabel: 'Include In Burnup:',
+			labelAlign: 'right',
+			rowSelectable: true,
+			margin: 8,
+			listCfg:  {selModel: {mode: 'SIMPLE'}, displayField: "type", pageSize: 0, autoScroll: true, cls: 'rui-multi-object-list'},
+            store: store,
+            /*
+			storeConfig: {
+				context: this._getScopeLimitedContext(),
+				sorters: [{ // does not seem to work...
+						property: 'ReleaseDate',
+						direction: 'ASC'
+					}],
+				listeners: {
+					load: setCheckboxesFromPrefs,
+					scope: this
+				}
+			},
+            */
+			listeners: {
+//				added:				function(picker) { this.releasePicker = picker; },
+//				selectionchange:	recordSelectionAsReleaseFilters,
+//				blur:				setCardboardFiltersFromPrefs,
+
+				scope:				this
+			},
+//			modelType: 'release',
+//			renderTo: Ext.getBody().dom
+		};
+	},
+
     launch: function() {
 		this.velocityCalc = new VelocityCalculator(this);
+
+        /*
+        var picker = this.getTestPicker();
+        var panel	= this.down('#topPanel');
+
+        panel.add(picker);
+        */
     }, // No launch function currently needed: createChart is triggered when a release is ready or selected
 
     // switch to app configuration from ui selection
@@ -311,6 +863,10 @@ Ext.define('CustomApp', {
                 name: 'epicIds',
                 xtype: 'rallytextfield',
                 label : "(Optional) List of Parent PortfolioItem (Epics) ids to filter Features by"
+            }, {
+                name: 'featureIds',
+                xtype: 'rallytextfield',
+                label : "(Optional) List of PortfolioItem ids to exclusively show"
             }, {
                 name: 'ignoreZeroValues',
                 xtype: 'rallycheckboxfield',
@@ -336,6 +892,7 @@ Ext.define('CustomApp', {
         app.configReleases   = app.getSetting("releases") || app.defaultRelease;
         app.ignoreZeroValues = app.getSetting("ignoreZeroValues");
         app.epicIds          = app.getSetting("epicIds");
+//        app.featureIds       = app.getSetting("featureIds");
 
         if (app.configReleases === "") {
             this.resetChart("Please Configure this app by selecting Edit App Settings from Configure (gear) Menu");
@@ -391,7 +948,7 @@ Ext.define('CustomApp', {
                 {
                     model  : "Iteration",
                     fetch  : ['Name', 'ObjectID', 'Project', 'StartDate', 'EndDate'],
-                    filters: app.createIterationFilter(app.releases)
+                    filters: app.createIterationFilter(app.releases) // XXX app.Releases is an array!
                 }
             ];
 
@@ -565,6 +1122,7 @@ Ext.define('CustomApp', {
         app.executeFeatureQuery(filter);
     },
 
+    // No longer used
     queryFeatures : function() {
         var filter = null;
         var releaseNames = _.uniq(_.map(app.releases,function(r){ return r.get("Name");}));
@@ -583,43 +1141,66 @@ Ext.define('CustomApp', {
         app.executeFeatureQuery(filter);
     },
 
-    queryFeatureSnapshots : function () {
-        var ids = _.pluck(app.features, function(feature) { return feature.get("ObjectID");} );
+    //
+    // User can choose to limit the feature ids
+    // from which the burnup is created
+    //
+    getSpecificFeatureIds: function() {
+        var features = !app.allFeaturesSelected() && app.selectedFeatures;
+
+//        features = ['F1020'];
+
+        return features;
+    },
+
+    getSnapshotFilters: function(type) {
+        // var ids = _.pluck(app.features, function(feature) { return feature.get("ObjectID");} );
         // var pes = _.pluck(app.features, function(feature) { return feature.get("PreliminaryEstimate");} );
-        var extent = app.getReleaseExtent(app.releases);
         // console.log("ids",ids,pes);
+
+        var extent = app.getReleaseExtent(app.releases);
         var relIDs = _.map(app.releases, function (release) { return release.data.ObjectID; });
-        var find = {
-//                'ObjectID' : { "$in" : ids },
-                '_TypeHierarchy' : { "$in" : [app.featureType] },
-                'Release': { "$in" : relIDs },
-                '_ValidTo' : { "$gte" : extent.isoStart }
+        var filters;
+
+        if (type === 'defect') {
+            filters = {
+                '_TypeHierarchy': { "$in" : ["Defect"] },
+                'Release':		  { "$in" : relIDs },
+                'PlanEstimate':   { "$gt" : 0 },
+                '_ValidTo':		  { "$gte" : extent.isoStart }
             };
 
-            if (app.onlyP0s()) {
-                find.c_Priority = { "$in": ['P0']};
+        } else {
+            filters = {
+                    '_TypeHierarchy': { "$in" : [app.featureType] },
+                    'Release': 		  { "$in" : relIDs },
+                    '_ValidTo':	      { "$gte" : extent.isoStart }
+                };
+
+
+            // If the feature has chosen to view certain featureIDs, find those; otherwise get all associated with the
+            // matching release Ids
+            var featureIds = this.getSpecificFeatureIds();
+
+            if (featureIds) {
+                filters.FormattedID = { "$in" : featureIds };
+            } else {
+                filters.Release     = { "$in" : relIDs };
             }
 
-        var featureStoreConfig = {
-            find : find,
-            autoLoad : true,
-            pageSize:1000,
-            limit: 'Infinity',
-//            fetch: ['_UnformattedID','ObjectID','_TypeHierarchy','PreliminaryEstimate', 'LeafStoryCount','LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal','AcceptedLeafStoryCount','PercentDoneByStoryCount','RefinedEstimate']
-//            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal']
-            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal', 'c_Priority'],
-            hydrate: ['c_Priority']
-        };
+            if (app.onlyP0s()) {
+                filters.c_Priority = { "$in": ['P0']};
+            }
+        }
 
-//        console.log('releases', _.map(app.releases, function (release) { return release.data.ObjectID; }));
+        return filters;
+    },
+
+    queryFeatureSnapshots : function () {
+        var defectStoreFilters  = this.getSnapshotFilters('defect');
 
         var defectStoreConfig = {
-            find: {
-                '_TypeHierarchy': { "$in" : ["Defect"] },
-                'Release': { "$in" : relIDs },
-                'PlanEstimate': { "$gt" : 0 },
-                '_ValidTo': { "$gte" : extent.isoStart }
-            },
+            find: defectStoreFilters,
             autoLoad : true,
             pageSize: 1000,
             limit: 'Infinity',
@@ -627,28 +1208,50 @@ Ext.define('CustomApp', {
             hydrate: ['ScheduleState'],
             listeners: {
                 load: function(store, snapshots, success) {
-                console.log("Loaded:"+snapshots.length," Defects snapshots");
+                    if (snapshots) {
+                        console.log("Loaded:"+snapshots.length," Defects snapshots", success);
+                    }
 
+                    if (success === false) {
+                        Rally.ui.notify.Notifier.show({message: "Failed to load defect data"});
+                    }
                     app.gotSnapshotData('defects', snapshots);
                 }
             }
         };
 
+        var featureStoreFilters = this.getSnapshotFilters('feature');
+        var featureStoreConfig = {
+            find : featureStoreFilters,
+            autoLoad : true,
+            pageSize:1000,
+            limit: 'Infinity',
+//            fetch: ['_UnformattedID','ObjectID','_TypeHierarchy','PreliminaryEstimate', 'LeafStoryCount','LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal','AcceptedLeafStoryCount','PercentDoneByStoryCount','RefinedEstimate']
+//            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal']
+            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal', 'c_Priority', 'FormattedID'],
+            hydrate: ['c_Priority']
+        };
+
+//        console.log('releases', _.map(app.releases, function (release) { return release.data.ObjectID; }));
+
         featureStoreConfig.listeners = {
             scope : this,
             load: function(store, snapshots, success) {
-                console.log("Loaded:"+snapshots.length," Feature Snapshots.");
+                console.log("Loaded:"+snapshots.length," Feature Snapshots.", success);
 
+                if (success === false) {
+                    Rally.ui.notify.Notifier.show({message: "Failed to load user story data"});
+                }
                 app.gotSnapshotData('features', snapshots);
             }
         };
 
         if (!this.featureSnapshots) {
-            console.log("Querying for feature snapshots");
+            console.log("Querying for feature snapshots", featureStoreConfig.find);
             Ext.create('Rally.data.lookback.SnapshotStore', featureStoreConfig);
         }
         if (this.includeDefects()) {
-            console.log("Querying for defects snapshots");
+            console.log("Querying for defects snapshots", defectStoreConfig.find);
             Ext.create('Rally.data.lookback.SnapshotStore', defectStoreConfig);
         }
     },
@@ -663,7 +1266,12 @@ Ext.define('CustomApp', {
             defect.data.LeafStoryPlanEstimateTotal = defect.data.PlanEstimate;
 
             defect.data.c_Priority = 'P0'; // Defects all considered P0
+            defect.data.c_Type = 'DEFECT'; // Identify as a defect
+
             defect.data.AcceptedLeafStoryPlanEstimateTotal =
+                defect.data.ScheduleState === 'Accepted' ? defect.data.PlanEstimate : 0;
+
+            defect.data.c_AcceptedPlanEstimate =
                 defect.data.ScheduleState === 'Accepted' ? defect.data.PlanEstimate : 0;
         });
 
@@ -684,11 +1292,55 @@ Ext.define('CustomApp', {
         }
     },
 
+    getFilterIdMap: function() {
+        var featureIds = this.getSpecificFeatureIds();
+        var map		   = null;
+
+        if (featureIds) {
+            map = {};
+
+            _(featureIds).forEach(function(fid) {
+                map[fid] = 1;
+            });
+        }
+
+        return map;
+    },
+
+    //
+    // Filter snapShot data based on filterMap
+    //
+    // Any defects should be passed through-- those are filtered elsewhere.
+    //
+    filterSnapShotFeatureData: function (snapShotData) {
+        var filterMap		= this.getFilterIdMap();
+        var filteredData	= [];
+
+        if (filterMap == null) {
+            filteredData = snapShotData;
+
+        } else {
+            _(snapShotData).forEach(function(snapShot) {
+                // If no FormattedID, then its a defect, and those if those are filtered earlier
+            	// so just pass them through.
+            	//
+            	// If a formated ID, only let them through if they are listed in the filter map
+            	//
+                if (!snapShot.FormattedID || filterMap[snapShot.FormattedID]) {
+                    filteredData.push(snapShot);
+                }
+            });
+        }
+
+        return filteredData;
+    },
+
     createAndShowBurnupChart : function () {
+//        console.log('createChart', app, app.featureSnapshots, app.defectSnapshots);
         var snapshots    = this.includeDefects() && app.defectSnapshots ?
                             app.featureSnapshots.concat(app.defectSnapshots) : app.featureSnapshots;
         var lumenize     = window.parent.Rally.data.lookback.Lumenize;
-        var snapShotData = _.map(snapshots,function(d){return d.data;});
+        var snapShotData = this.filterSnapShotFeatureData(_.map(snapshots,function(d){return d.data;}));
         var extent       = app.getReleaseExtent(app.releases);
 
         // can be used to 'knockout' holidays
@@ -728,6 +1380,9 @@ Ext.define('CustomApp', {
 
                 if (desc.match('P0') && !app.showP0s()) {
                     // skip
+                } else if (desc.match('Defect') && !app.showDefects()) {
+                    // skip
+
                 } else if (desc.match('Projection') && !app.showProjections()) {
                     // skip
                 } else {
@@ -787,8 +1442,8 @@ Ext.define('CustomApp', {
     // plotLineStyle: Style of the plot line to be passed to highcharts.  Also contains several special fields that we interpret here
     //
     //                 showLabel: Label the plotline as the name of the record it represents (e.g. Milestone Name)
-    //              plotLineType: 'milestone' can be removed by clicking and have special labels
-    //                            'iterationStart' has labels
+    //              plotLineType: 'milestone' and 'iterationStart' have special labels
+    //							  'iterationEnd' has no labels
     //                     color: Enter an explit color, otherwise it will try to lookup the DisplayColor of the object (works for Milestones),
     //                            else it will default to grey
     //
@@ -805,17 +1460,27 @@ Ext.define('CustomApp', {
         var plotLineType	= plotLineStyle.plotLineType || 'unknown';
 
         var plotLineConfigs = _.map(recordArray, function(record){
-            var d = new Date(Date.parse(record.raw[dateField])).toISOString().split("T")[0];
+            var date = new Date(Date.parse(record.raw[dateField]));
+                if (plotLineType == 'iterationEnd') {
+					// For some groups interations start and end on the same day, but not all.
+                    // So unfortunately this fix to avoid "double" iteration lines is not enough.
+
+// Leave this out for now until we get clarification from Rally: XXX
+//                    date.setDate(date.getDate() + 1);
+                }
+            var dateStr = date.toISOString().split("T")[0];
 
             var color = plotLineStyle.color || record.get("DisplayColor") || "grey";
             var labelHTML = '<span style="font-family:Rally;color:' + color + '">8</span>'; // 8 is a downward pointing triangle in the Rally font
             var labelTitle = record.get("Name");
 
+            // We will show the plot line of the end date one day after the start
+
             var plotLineConfig = {
                 dashStyle: "Dot",
                 color: color,
                 width: 1,
-                value: _.indexOf(seriesDates,d)
+                value: _.indexOf(seriesDates, dateStr)
             };
 
             if (plotLineType == 'milestone') {
@@ -941,6 +1606,55 @@ Ext.define('CustomApp', {
         return itPlotLines.concat(itEPlotLines).concat(rePlotLines).concat(miPlotLines);
     },
 
+    getChartTitle: function() {
+        var title = '';
+
+        var fids	= app.getSpecificFeatureIds();
+        if (fids && fids.length == 0) {
+          	if (this.includeDefects()) {
+                title = 'Only showing Defects';
+          	} else {
+                title = 'No features or defects selected';
+          	}
+
+        } else if (fids) {
+            var ignored = app.ignoredFeatures || [];
+
+            if (fids.length <= ignored.length) {
+                if (fids.length == 1) {
+                    title = "Limited to feature " + fids[0] + ': ' + this.featureToNameMap[fids[0]];
+
+                } else {
+                    title = "Limited to features: " + fids.join(', ');
+                }
+
+              	if (this.includeDefects()) {
+                    title += ' and Defects';
+              	}
+            } else {
+                if (ignored.length == 1) {
+                    title = "Excluding feature " + ignored[0] + ': ' + this.featureToNameMap[ignored[0]];
+                } else {
+                    title = "Excluding features: " + ignored.join(', ');
+                }
+
+              	if (!this.includeDefects()) {
+                    title += ' and Defects';
+              	}
+            }
+
+        } else {
+          	if (!this.includeDefects()) {
+                title += 'Not showing Defects';
+          	}
+        }
+
+        // Because if we have no title, the spacing changes
+        if (title == '') { title = ' '; }
+
+        return title;
+    },
+
     showChart : function(series) {
         app.resetChart();
         app.seriesDates = series[0].data;
@@ -950,7 +1664,7 @@ Ext.define('CustomApp', {
 
         // set the tick interval
         var tickInterval = series[1].data.length <= (7*20) ? 7 : (series[1].data.length / 20);
-
+        var title	= this.getChartTitle();
         var extChart = Ext.create('Rally.ui.chart.Chart', {
             columnWidth : 1,
             itemId : "chart1",
@@ -964,7 +1678,7 @@ Ext.define('CustomApp', {
             chartConfig : {
                 chart: { },
                 title: {
-                    text: ' ', // Leave it blank...could be "Release Burnup", or the name of the project/release
+                    text: title,
                     x: -20 //center
                 },
                 plotOptions: {
@@ -1253,7 +1967,7 @@ function projectToZero( data, x) {
     gridPanelId: '#gridPanel',
 
     storeFields: ['startName', 'endName', 'days', 'acceptVelocity', 'acceptDelta', 'scopeVelocity', 'scopeDelta',
-                    'acceptPoints',
+                    'acceptPoints', 'accPointsPerMo',
         	         'segmentVelPerMo', 'segmentVel'],
 
     constructor: function(theApp) {
@@ -1291,8 +2005,8 @@ function projectToZero( data, x) {
 
         this.addGridsToPanel([
         		 this.getOverallVelocityGrid(seriesData),
-        		 this.getMilestoneVelocityGrid(seriesData, milestones),
-        		 this.getIterationVelocityGrid(seriesData, iterations)
+        		 this.getIterationVelocityGrid(seriesData, iterations),
+        		 this.getMilestoneVelocityGrid(seriesData, milestones)
         ]);
     },
 
@@ -1302,6 +2016,18 @@ function projectToZero( data, x) {
         var doneDate		= daysToFinish === '' ? 'n/a' : Ext.Date.format(Ext.Date.add(new Date(), Ext.Date.DAY, daysToFinish), 'Y-m-d');
 
         return doneDate;
+    },
+
+    calcPct: function(num, total) {
+        var pct	= total ? Math.round(num/total*100) : '-';
+
+        return pct;
+    },
+
+    addPctToNum: function(num, total) {
+        var pct	= this.calcPct(num, total);
+
+        return num + ' (' + pct + '%)';
     },
 
     getOverallStats: function(seriesData, P0) {
@@ -1314,13 +2040,13 @@ function projectToZero( data, x) {
         var compDate		= today < endDate ? today : endDate;
 
         var acceptField		= P0 === true ? 'P0 Accepted Points' : 'Accepted Points';
-        var storyField		= P0 === true ? 'P0 Story Points' : 'Story Points';
+        var storyField		= P0 === true ? 'P0 Points' : 'Total Points';
 
-        var startAccPoints	= firstEntry[acceptField];
-        var acceptedPoints	= lastEntry[acceptField];
+        var startAccPoints	= Math.round(firstEntry[acceptField]);
+        var acceptedPoints	= Math.round(lastEntry[acceptField]);
         var curAccPoints	= acceptedPoints - startAccPoints;
-        var totalPoints		= lastEntry[storyField];
-        var acceptedPct		= totalPoints ? Math.round(curAccPoints/totalPoints*100) + '%' : '-';
+        var totalPoints		= Math.round(lastEntry[storyField]);
+        var remainingPoints	= totalPoints - curAccPoints;
         var totalDays	  	= this.subtractDates(endDate, startDate);
         var daysPast	  	= this.subtractDates(compDate, startDate);
         var monthsPast	    = daysPast / 30;
@@ -1334,7 +2060,7 @@ function projectToZero( data, x) {
             avgMoVelocity:	avgMoVelocity,
             totalPoints:	totalPoints,
             acceptedPoints:	acceptedPoints,
-            acceptedPct:	acceptedPct,
+            remainingPoints:this.addPctToNum(remainingPoints, totalPoints),
             daysPct:		daysPct,
             doneDate:		doneDate
         };
@@ -1354,9 +2080,9 @@ function projectToZero( data, x) {
 
         var stats			= [
                  { stat: 'Avg. Velocity / Month',  value: totalStats.avgMoVelocity,  P0Value: p0Stats.avgMoVelocity, edit: true },
-                 { stat: 'Total Points',           value: totalStats.totalPoints,    P0Value: p0Stats.totalPoints },
+                 { stat: 'Total Points',           value: totalStats.totalPoints,    P0Value: p0Stats.totalPoints, edit: true },
                  { stat: 'Accepted Points',        value: totalStats.acceptedPoints, P0Value: p0Stats.acceptedPoints },
-                 { stat: 'Accepted % Since Start', value: totalStats.acceptedPct,    P0Value: p0Stats.acceptedPct },
+                 { stat: 'Remaining Points',       value: totalStats.remainingPoints,P0Value: p0Stats.remainingPoints },
                  { stat: '% Time Used',            value: totalStats.daysPct,		 P0Value: p0Stats.daysPct },
                  { stat: 'Completion Estimate',    value: totalStats.doneDate,		 P0Value: p0Stats.doneDate }
            ];
@@ -1389,17 +2115,21 @@ function projectToZero( data, x) {
                             var field	= e.field;
                             var models	= grid.getStore().getRange();
 
+                            var velocity	= models[0].get(field).toString();
                             var totPoints	= models[1].get(field).toString();
                             var accPoints	= models[2].get(field).toString();
-                            var velocity	= e.value.toString();
+                            var remPoints	= this.addPctToNum(totPoints-accPoints, totPoints);
 
                             console.log('calc', totPoints, accPoints, velocity);
 
                             var doneDate = that.calcDoneDate(totPoints, accPoints, velocity);
 
-                            models[5].set(field, doneDate);
+                            models[5].set(field, doneDate); // Set new done date
+
+                            models[3].set(field, remPoints); // Set new points remaining
                         }
-                    }
+                    },
+            		scope: this
                 }
 			}],
             width: 400,
@@ -1447,7 +2177,7 @@ function projectToZero( data, x) {
                 	}
             	}
             var acceptedDiff  = nextPointData['Accepted Points'] - pointData['Accepted Points'];
-            var scopeDiff	  = nextPointData['Story Points'] - pointData['Story Points'];
+            var scopeDiff	  = nextPointData['Total Points'] - pointData['Total Points'];
             var days	  	  = this.subtractDates(nextDate, date);
             var months		  = days / 30;
 
@@ -1456,10 +2186,12 @@ function projectToZero( data, x) {
                     startName:		name,
                     endName:		nextName + ' (' + days + ' days)',
                     days:			days,
-                    segmentVel:		acceptedDiff - scopeDiff,
-                    segmentVelPerMo:Math.round((acceptedDiff - scopeDiff)/months * 100) / 100,
+                    segmentVel:		Math.round(acceptedDiff - scopeDiff),
+                    segmentVelPerMo:months ? Math.round((acceptedDiff - scopeDiff)/months * 100) / 100 : '-',
 
-                    acceptPoints:   acceptedDiff,
+                    acceptPoints:   Math.round(acceptedDiff),
+                    accPointsPerMo: months ? Math.round((acceptedDiff)/months * 100) / 100 : '-',
+
                     acceptDelta:    this.velocityStr(acceptedDiff, months),
                     scopeDelta:     this.velocityStr(scopeDiff, months),
                     effectiveVel:   this.velocityStr(acceptedDiff - scopeDiff, months)
@@ -1473,7 +2205,7 @@ function projectToZero( data, x) {
         var that			= this;
         var today			= this.today();
 
-        var uniqIterations = _.uniq(_.map(iterations, function(i){ return i.raw;}), 'Name');
+        var uniqIterations = _.sortBy(_.uniq(_.map(iterations, function(i){ return i.raw;}), 'Name'), 'StartDate');
 
         _.each( uniqIterations, function(iteration) {
             var date	  = iteration.StartDate.replace(/T.*/, '');
@@ -1502,8 +2234,8 @@ function projectToZero( data, x) {
             columns: [
                       { text: 'Iteration',       dataIndex: 'endName', flex: 300, align: 'right', hidden: false },
                       { text: 'Accepted Points',     dataIndex: 'acceptPoints', hidden: false},
+                      { text: 'Acc / Month', dataIndex: 'accPointsPerMo', hidden: false },
                       { text: 'Effective Velocity', dataIndex: 'segmentVel', hidden: true },
-                      { text: 'EV / Month', dataIndex: 'segmentVelPerMo', hidden: true },
                       { text: 'Scope Change',        dataIndex: 'scopeDelta', hidden: true }
             ],
             width: 400,
@@ -1684,6 +2416,37 @@ function projectToZero( data, x) {
     </script>
 
 
+    <style type="text/css">
+        /* check combo */
+/*
+.x-combo-checker {
+    background-position: 50% -2px; margin-left: 1px; background-color: transparent; background-image: url("/extjs/resources/themes/images/default/grid/unchecked.gif"); background-position: -1px -1px; background-repeat: no-repeat; height: 14px; width: 14px; display: inline-block;
+}
+
+.x-boundlist-selected .x-combo-checker {
+    background-image: url("/extjs/resources/themes/images/default/grid/checked.gif");
+}
+*/
+.x-combo-checker {
+  background-position: 50% -2px;
+  margin-left: 1px;
+  background-color: transparent;
+  background-image: url("https://rally1.rallydev.com/apps/2.0/rui/resources/themes/images/default/checkbox/checkbox_unselected.png");
+  background-position: -1px -1px;
+  background-repeat: no-repeat;
+  height: 15px;
+  width: 15px;
+  display: inline-block;
+}
+.x-boundlist-selected .x-combo-checker {
+  background-image: url("https://rally1.rallydev.com/apps/2.0/rui/resources/themes/images/default/checkbox/checkbox_selected.png");
+}
+/*
+.rui-picker-checkbox .rui-picker-cb-checked
+.rui-picker-checkbox
+*/
+
+    </style>
     <style type="text/css">
         .app {
   /* Add app styles here */

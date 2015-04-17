@@ -93,35 +93,104 @@ Ext.define('CustomApp', {
                 handler: function(checkbox, showLabels) {
                 	app.createAndShowBurnupChart();
                 }
-            }, /*{
-                xtype: 'rallymultiobjectpicker',
-                modelType: 'portfolioitem/feature',
-//                itemId: 'test',
-               fieldLabel: 'Select Features',
+            }, {
+                xtype: 'rallybutton',
+                itemId: 'selectFeatureButton',
                 labelAlign: 'right',
-                margin: 8jjjjjj,
-                text: "Select Portfolio Items",
-     //           handler: function(checkbox, showLabels) {
-      //          	console.log('selected', checkbox, showLabels);
-       //         },
-                storeConfig: {
-                    filters: [{
-                        property: 'Name',
-                        operator: '=',
-                        value: 'IME 1.0'
-                    }]
+                margin: 8,
+                text: "Select Components",
+                listeners: {
+                    menuhide: function(button, event, eOpts) {
+                        app.displayFeatureSelection();
+                    },
+                    click: function(button, event, eOpts) {
+                    	if (!app.featureRecords) {
+                            var release = app.releases && app.releases[0];
+                            var relName = release && release.get('Name');
+
+                            button.menu.setLoading(true);
+
+                            app.featureToNameMap = {};
+
+                            var config = {
+                                model  : app.featureType,
+                                fetch  : ['Name', 'FormattedID'],
+                                filters: [{
+                                    property: 'Release.Name',
+                                    operator: '=',
+                                    value: relName
+                                }]
+                            };
+                            app.wsapiQuery(config, function(err, featureRecords) {
+                                _(featureRecords).forEach(function(featureRecord) {
+                                    var name = featureRecord.get('Name');
+                                    var id	 = featureRecord.get('FormattedID');
+
+                                    app.featureToNameMap[id] = name;
+
+                                    button.menu.add({ text: id + ': ' + name, xtype: 'menucheckitem', value: id, checked: true,
+                                        	listeners: {
+                                            	checkHandler: function(checkbox) {
+                                                    if (checkbox.checked) {
+                                                        app.setCheckbox('selectNone', false);
+                                                    } else {
+                                                        app.setCheckbox('selectAll', false);
+                                                    }
+                                                }
+                                            }
+                                    	});
+                                });
+
+                                app.featureRecords = featureRecords;
+                                button.menu.setLoading(false);
+                            });
+                    	}
+                    }
+
                 },
 
                 menu: [
                        {
-                           text: 'Hello',
-                           xtype: 'menucheckitem'
+                           xtype: 'menucheckitem',
+                           text: 'Select All',
+                           itemId: 'selectAll',
+                           checked: true,
+                           handler: function(checkbox) {
+                                var checked	= checkbox.checked;
+
+                                if (checked) {
+                                    app.setAllInSelectMenu(true);
+                                }
+                           }
                        }, {
-                           text: 'Bye',
-                           xtype: 'menucheckitem'
-                       }
+                           xtype: 'menucheckitem',
+                           text: 'Select None',
+                           itemId: 'selectNone',
+                           handler: function(checkbox) {
+                                var checked	= checkbox.checked;
+
+                                if (checked) {
+                                    app.setAllInSelectMenu(false);
+                                }
+                           }
+                       }, { xtype: 'menuseparator' }, {
+                           xtype: 'menucheckitem',
+                           text: 'Include Defects',
+                           itemId: 'includeDefects',
+                           handler: function(checkbox) {
+                                var checked	= checkbox.checked;
+
+                                if (checked) {
+                                    app.setCheckbox('selectNone', false);
+                                } else {
+                                    app.setCheckbox('selectAll', false);
+                                }
+                           },
+                           checked: true
+                       }, { xtype: 'menuseparator' }
                 ],
-           }*/]
+            },
+           ]
 
         }, {
             xtype: 'panel',
@@ -142,24 +211,111 @@ Ext.define('CustomApp', {
         }
     ],
 
+    //
+    // Once the user has changed the selection of burnup features and defects, display that
+    //
+    displayFeatureSelection: function() {
+        var button				= app.down('#selectFeatureButton');
+        var menuItems			= button.menu.items.items;
+        var selectedFeatures	= [];
+        var ignoredFeatures		= [];
+
+        _(menuItems).forEach(function(menuItem) {
+            if (menuItem.value && menuItem.checked) {
+                selectedFeatures.push(menuItem.value);
+
+            } else if (menuItem.value && !menuItem.checked) {
+                ignoredFeatures.push(menuItem.value);
+            }
+        });
+
+        app.selectedFeatures = selectedFeatures;
+        app.ignoredFeatures	 = ignoredFeatures;
+
+        app.createAndShowBurnupChart();
+    },
+
+    //
+    // Feature selection is the widget that selects particular features to display in the burndown.
+    // If it is null, then that means display all features in the release, which is the default display.
+    //
+    resetFeatureSelection: function () {
+        this.selectedFeatures = null;
+        this.ignoredFeatures = null;
+
+        this.featureRecords = null;
+    },
+
+    allFeaturesSelected: function() {
+        var button		= app.down('#selectFeatureButton');
+    	var menu		= button.menu;
+        var allSelected = true;
+
+    	_(menu.items.items).forEach(function(menuItem) {
+            if (menuItem.value && menuItem.checked == false) {
+                allSelected = false;
+            }
+    	});
+
+        return allSelected;
+    },
+
+    //
+    // Check all the boxes in the feature select menu
+    //
+    setAllInSelectMenu: function(selectValue) {
+        var button	= app.down('#selectFeatureButton');
+    	var menu	= button.menu;
+
+        // console.log(menu);
+
+    	_(menu.items.items).forEach(function(menuItem) {
+            var text = menuItem.text;
+
+           //  console.log(text, menuItem);
+
+            if (menuItem.xtype == 'menuseparator') {
+                // Probably the separator
+
+            } else if (text == 'Select None') {
+                if (selectValue) {
+                    menuItem.setChecked(false);
+                }
+            } else {
+                menuItem.setChecked(selectValue);
+            }
+    	});
+    },
+
     getCheckboxValue: function(checkBoxId) {
         var checkbox = this.down('#' + checkBoxId);
 
-        return checkbox.value;
+        // console.log(checkBoxId, checkbox);
+
+        return checkbox.checked;
+    },
+
+    setCheckbox: function(checkBoxId, value) {
+        var checkbox = this.down('#' + checkBoxId);
+
+        checkbox.setChecked(value);
     },
 
     milestoneLabels: function() { return this.getCheckboxValue('milestoneLabels'); },
     iterationLabels: function() { return this.getCheckboxValue('iterationLabels'); },
-    includeDefects:  function() { return !this.getSpecificFeatureIds(); }, // this.getCheckboxValue('includeDefects')); }, // Don't include defects if we are  listing features
     showP0s:		 function() { return this.getCheckboxValue('showP0s'); },
     showDefects:	 function() { return this.getCheckboxValue('showDefects'); },
     showProjections: function() { return this.getCheckboxValue('showProjections'); },
     onlyP0s:		 function() { return false; }, // Used to be a checkbox, but now since we have the P0 lines as well, no longer needed
 
+    includeDefects:  function() { return this.getCheckboxValue('includeDefects'); }, // Don't include defects if we are  listing features
+
     // Called when the release combo box is ready or selected.  This triggers the building of the chart.
     setSelectedRelease: function(releaseCombo) {
         var releaseName = releaseCombo.getRecord().data.Name;
         this.defaultRelease = releaseName;
+
+        this.resetFeatureSelection();
 
         this.resetData();
         this.createChart();
@@ -275,7 +431,7 @@ Ext.define('CustomApp', {
         app.configReleases   = app.getSetting("releases") || app.defaultRelease;
         app.ignoreZeroValues = app.getSetting("ignoreZeroValues");
         app.epicIds          = app.getSetting("epicIds");
-        app.featureIds       = app.getSetting("featureIds");
+//        app.featureIds       = app.getSetting("featureIds");
 
         if (app.configReleases === "") {
             this.resetChart("Please Configure this app by selecting Edit App Settings from Configure (gear) Menu");
@@ -331,7 +487,7 @@ Ext.define('CustomApp', {
                 {
                     model  : "Iteration",
                     fetch  : ['Name', 'ObjectID', 'Project', 'StartDate', 'EndDate'],
-                    filters: app.createIterationFilter(app.releases)
+                    filters: app.createIterationFilter(app.releases) // XXX app.Releases is an array!
                 }
             ];
 
@@ -529,11 +685,11 @@ Ext.define('CustomApp', {
     // from which the burnup is created
     //
     getSpecificFeatureIds: function() {
-        var featureIds = app.featureIds && app.featureIds.split(",");
+        var features = !app.allFeaturesSelected() && app.selectedFeatures;
 
-//        featureIds = ['F1020'];
+//        features = ['F1020'];
 
-        return featureIds;
+        return features;
     },
 
     getSnapshotFilters: function(type) {
@@ -591,7 +747,9 @@ Ext.define('CustomApp', {
             hydrate: ['ScheduleState'],
             listeners: {
                 load: function(store, snapshots, success) {
-                    console.log("Loaded:"+snapshots.length," Defects snapshots", success);
+                    if (snapshots) {
+                        console.log("Loaded:"+snapshots.length," Defects snapshots", success);
+                    }
 
                     if (success === false) {
                         Rally.ui.notify.Notifier.show({message: "Failed to load defect data"});
@@ -609,7 +767,7 @@ Ext.define('CustomApp', {
             limit: 'Infinity',
 //            fetch: ['_UnformattedID','ObjectID','_TypeHierarchy','PreliminaryEstimate', 'LeafStoryCount','LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal','AcceptedLeafStoryCount','PercentDoneByStoryCount','RefinedEstimate']
 //            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal']
-            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal', 'c_Priority'],
+            fetch: ['LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal', 'c_Priority', 'FormattedID'],
             hydrate: ['c_Priority']
         };
 
@@ -673,12 +831,55 @@ Ext.define('CustomApp', {
         }
     },
 
+    getFilterIdMap: function() {
+        var featureIds = this.getSpecificFeatureIds();
+        var map		   = null;
+
+        if (featureIds) {
+            map = {};
+
+            _(featureIds).forEach(function(fid) {
+                map[fid] = 1;
+            });
+        }
+
+        return map;
+    },
+
+    //
+    // Filter snapShot data based on filterMap
+    //
+    // Any defects should be passed through-- those are filtered elsewhere.
+    //
+    filterSnapShotFeatureData: function (snapShotData) {
+        var filterMap		= this.getFilterIdMap();
+        var filteredData	= [];
+
+        if (filterMap == null) {
+            filteredData = snapShotData;
+
+        } else {
+            _(snapShotData).forEach(function(snapShot) {
+                // If no FormattedID, then its a defect, and those if those are filtered earlier
+            	// so just pass them through.
+            	//
+            	// If a formated ID, only let them through if they are listed in the filter map
+            	//
+                if (!snapShot.FormattedID || filterMap[snapShot.FormattedID]) {
+                    filteredData.push(snapShot);
+                }
+            });
+        }
+
+        return filteredData;
+    },
+
     createAndShowBurnupChart : function () {
 //        console.log('createChart', app, app.featureSnapshots, app.defectSnapshots);
         var snapshots    = this.includeDefects() && app.defectSnapshots ?
                             app.featureSnapshots.concat(app.defectSnapshots) : app.featureSnapshots;
         var lumenize     = window.parent.Rally.data.lookback.Lumenize;
-        var snapShotData = _.map(snapshots,function(d){return d.data;});
+        var snapShotData = this.filterSnapShotFeatureData(_.map(snapshots,function(d){return d.data;}));
         var extent       = app.getReleaseExtent(app.releases);
 
         // can be used to 'knockout' holidays
@@ -798,17 +999,27 @@ Ext.define('CustomApp', {
         var plotLineType	= plotLineStyle.plotLineType || 'unknown';
 
         var plotLineConfigs = _.map(recordArray, function(record){
-            var d = new Date(Date.parse(record.raw[dateField])).toISOString().split("T")[0];
+            var date = new Date(Date.parse(record.raw[dateField]));
+                if (plotLineType == 'iterationEnd') {
+					// For some groups interations start and end on the same day, but not all.
+                    // So unfortunately this fix to avoid "double" iteration lines is not enough.
+
+// Leave this out for now until we get clarification from Rally: XXX
+//                    date.setDate(date.getDate() + 1);
+                }
+            var dateStr = date.toISOString().split("T")[0];
 
             var color = plotLineStyle.color || record.get("DisplayColor") || "grey";
             var labelHTML = '<span style="font-family:Rally;color:' + color + '">8</span>'; // 8 is a downward pointing triangle in the Rally font
             var labelTitle = record.get("Name");
 
+            // We will show the plot line of the end date one day after the start
+
             var plotLineConfig = {
                 dashStyle: "Dot",
                 color: color,
                 width: 1,
-                value: _.indexOf(seriesDates,d)
+                value: _.indexOf(seriesDates, dateStr)
             };
 
             if (plotLineType == 'milestone') {
@@ -934,6 +1145,55 @@ Ext.define('CustomApp', {
         return itPlotLines.concat(itEPlotLines).concat(rePlotLines).concat(miPlotLines);
     },
 
+    getChartTitle: function() {
+        var title = '';
+
+        var fids	= app.getSpecificFeatureIds();
+        if (fids && fids.length == 0) {
+          	if (this.includeDefects()) {
+                title = 'Only showing Defects';
+          	} else {
+                title = 'No features or defects selected';
+          	}
+
+        } else if (fids) {
+            var ignored = app.ignoredFeatures || [];
+
+            if (fids.length <= ignored.length) {
+                if (fids.length == 1) {
+                    title = "Limited to feature " + fids[0] + ': ' + this.featureToNameMap[fids[0]];
+
+                } else {
+                    title = "Limited to features: " + fids.join(', ');
+                }
+
+              	if (this.includeDefects()) {
+                    title += ' and Defects';
+              	}
+            } else {
+                if (ignored.length == 1) {
+                    title = "Excluding feature " + ignored[0] + ': ' + this.featureToNameMap[ignored[0]];
+                } else {
+                    title = "Excluding features: " + ignored.join(', ');
+                }
+
+              	if (!this.includeDefects()) {
+                    title += ' and Defects';
+              	}
+            }
+
+        } else {
+          	if (!this.includeDefects()) {
+                title += 'Not showing Defects';
+          	}
+        }
+
+        // Because if we have no title, the spacing changes
+        if (title == '') { title = ' '; }
+
+        return title;
+    },
+
     showChart : function(series) {
         app.resetChart();
         app.seriesDates = series[0].data;
@@ -943,11 +1203,7 @@ Ext.define('CustomApp', {
 
         // set the tick interval
         var tickInterval = series[1].data.length <= (7*20) ? 7 : (series[1].data.length / 20);
-        var fids = app.getSpecificFeatureIds();
-        var title = fids ? "Limited to features: " + fids.join(', ') : ' ';
-
-        console.log('title', title);
-
+        var title	= this.getChartTitle();
         var extChart = Ext.create('Rally.ui.chart.Chart', {
             columnWidth : 1,
             itemId : "chart1",
