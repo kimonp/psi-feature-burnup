@@ -32,78 +32,71 @@ Ext.define('CustomApp', {
                     }
                 }
             }, {
-                xtype: 'rallycheckboxfield',
-                itemId: 'milestoneLabels',
-                fieldLabel: 'Milestone Labels',
+                xtype: 'rallybutton',
+                itemId: 'selectBurnupLinesButton',
                 labelAlign: 'right',
                 margin: 8,
-                value: true,
-                handler: function(checkbox, showLabels) {
-                    app.removePlotLines('milestone');
-                    app.addPlotLines('milestone', showLabels);
-                }
-            }, {
-                xtype: 'rallycheckboxfield',
-                itemId: 'iterationLabels',
-                fieldLabel: 'Iteration Labels',
-                labelAlign: 'right',
-                margin: 8,
-                value: true,
-                handler: function(checkbox, showLabels) {
-                    app.removePlotLines('iterationStart');
-                    app.addPlotLines('iterationStart', showLabels);
-                }
-            }, /* {
-                xtype: 'rallycheckboxfield',
-                itemId: 'includeDefects',
-                fieldLabel: 'Include Defects',
-                labelAlign: 'right',
-                margin: 8,
-                value: true,
-                handler: function(checkbox, showLabels) {
-                    app.createChart();
-                }
-            }, */ {
-                xtype: 'rallycheckboxfield',
-                itemId: 'showP0s',
-                fieldLabel: 'Show P0s',
-                labelAlign: 'right',
-                margin: 8,
-                value: false,
-                handler: function(checkbox, showLabels) {
-                	app.createAndShowBurnupChart();
-                }
-            }, {
-                xtype: 'rallycheckboxfield',
-                itemId: 'showDefects',
-                fieldLabel: 'Show Defects',
-                labelAlign: 'right',
-                margin: 8,
-                value: false,
-                handler: function(checkbox, showLabels) {
-                	app.createAndShowBurnupChart();
-                }
-            }, {
-                xtype: 'rallycheckboxfield',
-                itemId: 'showProjections',
-                fieldLabel: 'Show Projections',
-                labelAlign: 'right',
-                margin: 8,
-                value: false,
-                handler: function(checkbox, showLabels) {
-                	app.createAndShowBurnupChart();
-                }
+                text: "Burnup Display",
+                menu: [
+                    {
+                        xtype: 'menucheckitem',
+                        itemId: 'milestoneLabels',
+                        text: 'Milestone Labels',
+                        checked: true,
+                        handler: function(checkbox) {
+                            var showLabels	= checkbox.checked;
+
+                            app.removePlotLines('milestone');
+                            app.addPlotLines('milestone', showLabels);
+                        }
+                    }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'iterationLabels',
+                        text: 'Iteration Labels',
+                        checked: true,
+                        handler: function(checkbox) {
+                            var showLabels	= checkbox.checked;
+
+                            app.removePlotLines('iterationStart');
+                            app.addPlotLines('iterationStart', showLabels);
+                        }
+                    }, { xtype: 'menuseparator' }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'showP0s',
+                        text: 'P0 Burnup Lines',
+                        checked: false,
+                        handler: function(checkbox, showLabels) {
+                        	app.createAndShowBurnupChart();
+                        }
+                    }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'showDefects',
+                        text: 'Defect Burnup Lines',
+                        checked: false,
+                        handler: function(checkbox, showLabels) {
+                        	app.createAndShowBurnupChart();
+                        }
+                    }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'showProjections',
+                        text: 'Completion Projection Lines',
+                        checked: false,
+                        handler: function(checkbox, showLabels) {
+                        	app.createAndShowBurnupChart();
+                        }
+                    }],
             }, {
                 xtype: 'rallybutton',
                 itemId: 'selectFeatureButton',
                 labelAlign: 'right',
                 margin: 8,
-                text: "Select Components",
+                text: "Burnup Components",
                 listeners: {
                     menuhide: function(button, event, eOpts) {
                         app.displayFeatureSelection();
                     },
                     click: function(button, event, eOpts) {
+
                     	if (!app.featureRecords) {
                             var release = app.releases && app.releases[0];
                             var relName = release && release.get('Name');
@@ -114,7 +107,8 @@ Ext.define('CustomApp', {
 
                             var config = {
                                 model  : app.featureType,
-                                fetch  : ['Name', 'FormattedID'],
+                                fetch  : ['Name', 'FormattedID',
+                                          'LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal'],
                                 filters: [{
                                     property: 'Release.Name',
                                     operator: '=',
@@ -122,13 +116,28 @@ Ext.define('CustomApp', {
                                 }]
                             };
                             app.wsapiQuery(config, function(err, featureRecords) {
+                                // Sort by effort remaining to complete
+                                featureRecords = _.sortBy(featureRecords, function(rec) {
+                                        var tot		= rec.get('LeafStoryPlanEstimateTotal');
+                                        var done	= rec.get('AcceptedLeafStoryPlanEstimateTotal');
+                                        var rem		= tot - done;
+
+                                        return -rem;
+                                });
+
                                 _(featureRecords).forEach(function(featureRecord) {
-                                    var name = featureRecord.get('Name');
-                                    var id	 = featureRecord.get('FormattedID');
+                                    var name 		= featureRecord.get('Name');
+                                    var id	 		= featureRecord.get('FormattedID');
+                                    var totalPoints = featureRecord.get('LeafStoryPlanEstimateTotal');
+                                    var donePoints	= featureRecord.get('AcceptedLeafStoryPlanEstimateTotal');
+                                    var remPoints	= totalPoints - donePoints;
 
                                     app.featureToNameMap[id] = name;
 
-                                    button.menu.add({ text: id + ': ' + name, xtype: 'menucheckitem', value: id, checked: true,
+                                    button.menu.add({ text: '<b>' + id + '</b>: ' + name +
+                               			' <span style="font-size:9px">(' +
+                                    	remPoints + ': ' + donePoints + '/' + totalPoints + ')</span>',
+                                    	xtype: 'menucheckitem', value: id, checked: true,
                                         	listeners: {
                                             	checkHandler: function(checkbox) {
                                                     if (checkbox.checked) {
@@ -801,11 +810,21 @@ Ext.define('CustomApp', {
     //
     normalizeDefectSnapshotData: function(defectSnapshots) {
 
+        app.defectTotalPoints = 0;
+        app.defectAcceptedPoints = 0;
+
         _(defectSnapshots).forEach(function(defect) {
-            defect.data.LeafStoryPlanEstimateTotal = defect.data.PlanEstimate;
+            var planEstimate = defect.data.PlanEstimate;
+
+            defect.data.LeafStoryPlanEstimateTotal = planEstimate;
 
             defect.data.c_Priority = 'P0'; // Defects all considered P0
             defect.data.c_Type = 'DEFECT'; // Identify as a defect
+
+            app.defectTotalPoints += planEstimate;
+            if (defect.data.ScheduleState === 'Accepted') {
+                app.defectAcceptedPoints += planEstimate;
+            }
 
             defect.data.AcceptedLeafStoryPlanEstimateTotal =
                 defect.data.ScheduleState === 'Accepted' ? defect.data.PlanEstimate : 0;
