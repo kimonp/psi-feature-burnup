@@ -40,28 +40,6 @@ Ext.define('CustomApp', {
                 menu: [
                     {
                         xtype: 'menucheckitem',
-                        itemId: 'milestoneLabels',
-                        text: 'Milestone Labels',
-                        checked: true,
-                        handler: function(checkbox) {
-                            var showLabels	= checkbox.checked;
-
-                            app.removePlotLines('milestone');
-                            app.addPlotLines('milestone', showLabels);
-                        }
-                    }, {
-                        xtype: 'menucheckitem',
-                        itemId: 'iterationLabels',
-                        text: 'Iteration Labels',
-                        checked: true,
-                        handler: function(checkbox) {
-                            var showLabels	= checkbox.checked;
-
-                            app.removePlotLines('iterationStart');
-                            app.addPlotLines('iterationStart', showLabels);
-                        }
-                    }, { xtype: 'menuseparator' }, {
-                        xtype: 'menucheckitem',
                         itemId: 'showP0s',
                         text: 'P0 Burnup Lines',
                         checked: false,
@@ -83,6 +61,47 @@ Ext.define('CustomApp', {
                         checked: false,
                         handler: function(checkbox, showLabels) {
                         	app.createAndShowBurnupChart();
+                        }
+                    }, { xtype: 'menuseparator' }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'milestoneLabels',
+                        text: 'Milestone Labels',
+                        checked: true,
+                        handler: function(checkbox) {
+                            var showLabels	= checkbox.checked;
+
+                            app.removePlotLines('milestone');
+                            app.addPlotLines('milestone', showLabels);
+                        }
+                    }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'iterationLabels',
+                        text: 'Iteration Labels',
+                        checked: true,
+                        handler: function(checkbox) {
+                            app.removePlotLines('iterationStart');
+                            app.addPlotLines('iterationStart');
+                        }
+                    }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'iterationLines',
+                        text: 'Iteration Lines',
+                        checked: true,
+                        handler: function(checkbox) {
+                            app.removePlotLines('iterationStart');
+                            app.removePlotLines('iterationEnd');
+
+                            app.addPlotLines('iterationStart');
+                            app.addPlotLines('iterationEnd');
+                        }
+                    }, { xtype: 'menuseparator' }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'iterationOverlap',
+                        text: 'Overlaping Iteration Dates',
+                        checked: true,
+                        handler: function(checkbox) {
+                            app.removePlotLines('iterationEnd');
+                            app.addPlotLines('iterationEnd');
                         }
                     }],
             }, {
@@ -138,16 +157,14 @@ Ext.define('CustomApp', {
                                			' <span style="font-size:9px">(' +
                                     	remPoints + ': ' + donePoints + '/' + totalPoints + ')</span>',
                                     	xtype: 'menucheckitem', value: id, checked: true,
-                                        	listeners: {
-                                            	checkHandler: function(checkbox) {
-                                                    if (checkbox.checked) {
-                                                        app.setCheckbox('selectNone', false);
-                                                    } else {
-                                                        app.setCheckbox('selectAll', false);
-                                                    }
-                                                }
+                                    	handler:  function(checkbox) {
+                                            if (checkbox.checked) {
+                                                app.setCheckbox('selectNone', false);
+                                            } else {
+                                                app.setCheckbox('selectAll', false);
                                             }
-                                    	});
+                                        }
+                                	});
                                 });
 
                                 app.featureRecords = featureRecords;
@@ -980,15 +997,18 @@ Ext.define('CustomApp', {
         });
     },
 
-    addPlotLines: function(plotLineType, showLabelTitles) {
-        var xAxis		= this.getChartXAxis();
+    addPlotLines: function(plotLineType) {
+        var showLabelTitles = this.getCheckboxValue('iterationLabels') && plotLineType == 'iterationStart';
+        var xAxis			= this.getChartXAxis();
         var plotLines = plotLineType == 'milestone'
         				? this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles)
-        				: this.getIterationPlotLineConfigs(app.seriesDates, showLabelTitles, 'start');
+        				: this.getIterationPlotLineConfigs(app.seriesDates, showLabelTitles, plotLineType);
 
-        _(plotLines).forEach(function(plotLine) {
-            xAxis.addPlotLine(plotLine);
-        });
+        if (!plotLineType.match('iteration') || app.getCheckboxValue('iterationLines')) {
+            _(plotLines).forEach(function(plotLine) {
+                xAxis.addPlotLine(plotLine);
+            });
+        }
     },
 
     //
@@ -1019,12 +1039,11 @@ Ext.define('CustomApp', {
 
         var plotLineConfigs = _.map(recordArray, function(record){
             var date = new Date(Date.parse(record.raw[dateField]));
-                if (plotLineType == 'iterationEnd') {
+                if (plotLineType == 'iterationEnd' && !app.getCheckboxValue('iterationOverlap')) {
 					// For some groups interations start and end on the same day, but not all.
                     // So unfortunately this fix to avoid "double" iteration lines is not enough.
 
-// Leave this out for now until we get clarification from Rally: XXX
-//                    date.setDate(date.getDate() + 1);
+                    date.setDate(date.getDate() + 1);
                 }
             var dateStr = date.toISOString().split("T")[0];
 
@@ -1126,8 +1145,8 @@ Ext.define('CustomApp', {
     },
 
     getIterationPlotLineConfigs: function(seriesDates, showLabelTitles, type) {
-        var plotLineType	= type == 'start' ? 'iterationStart'	: 'iterationEnd';
-        var dateField		= type == 'start' ? 'StartDate'			: 'EndDate';
+        var plotLineType	= type == 'iterationStart' ? 'iterationStart'	: 'iterationEnd';
+        var dateField		= type == 'iterationStart' ? 'StartDate'		: 'EndDate';
         var start = new Date( Date.parse(seriesDates[0]));
         var end   = new Date( Date.parse(seriesDates[seriesDates.length-1]));
 
@@ -1156,8 +1175,9 @@ Ext.define('CustomApp', {
     // Milestone plot lines can be temporarily removed from the graph by clicking on them.
     //
     getAllPlotLineConfigs: function(seriesDates) {
-        var itPlotLines  = this.getIterationPlotLineConfigs(seriesDates, this.iterationLabels, 'start');
-        var itEPlotLines = this.getIterationPlotLineConfigs(seriesDates, false, 'end');
+        var itLines		 = app.getCheckboxValue('iterationLines');
+        var itPlotLines  = itLines ? this.getIterationPlotLineConfigs(seriesDates, this.iterationLabels(), 'iterationStart') : [];
+        var itEPlotLines = itLines ? this.getIterationPlotLineConfigs(seriesDates, false, 'iterationEnd') : [];
         var rePlotLines  = this.getPlotLineConfigs(seriesDates, this.selectedReleases, 'ReleaseDate', { dashStyle: 'dot', color: 'grey'} );
         var miPlotLines  = this.getMilestonePlotLineConfigs(seriesDates, this.milestoneLabels);
 
