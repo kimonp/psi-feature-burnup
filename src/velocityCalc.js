@@ -82,7 +82,7 @@ Ext.define("VelocityCalculator", {
         var acceptedPoints	= Math.round(lastEntry[acceptField]);
         var curAccPoints	= acceptedPoints - startAccPoints;
         var totalPoints		= Math.round(lastEntry[storyField]);
-        var remainingPoints	= totalPoints - curAccPoints;
+        var remainingPoints	= totalPoints - acceptedPoints;
         var totalDays	  	= this.subtractDates(endDate, startDate);
         var daysPast	  	= this.subtractDates(compDate, startDate);
         var monthsPast	    = daysPast / 30;
