@@ -447,6 +447,38 @@ Ext.define('CustomApp', {
         return values.concat(checkValues);
     },
 
+    //
+    // Check if the end data of a group if iterations overlaps the end date
+    //
+    iterationsDontOverlap: function(iterations) {
+        var overlap	= true;
+        var iter1 	= iterations[0];
+
+        if (iter1 && iterations.length > 1) {
+            var i;
+            var iter1Name = iter1.get('Name');
+            var iter2 = null;
+
+            for (i = 1; i < iterations.length; i++) {
+                var curName = iterations[i].get('Name');
+
+                if (curName != iter1Name) {
+                    iter2 = iterations[i];
+                    break;
+                };
+            }
+
+            if (iter1 && iter2) {
+                var iter1End	= Ext.Date.format(iter1.get('EndDate'), 'Y-M-d');
+                var iter2Start	= Ext.Date.format(iter2.get('StartDate'), 'Y-M-d');
+
+                overlap = iter1End < iter2Start;
+            }
+        }
+
+        return overlap;
+    },
+
     createChart: function() {
         if (!app) {
             app = this;
@@ -513,14 +545,22 @@ Ext.define('CustomApp', {
                 {
                     model  : "Iteration",
                     fetch  : ['Name', 'ObjectID', 'Project', 'StartDate', 'EndDate'],
-                    filters: app.createIterationFilter(app.releases) // XXX app.Releases is an array!
+                    filters: app.createIterationFilter(app.releases), // XXX app.Releases is an array!
+                    sorters: [{
+                       property: 'StartDate',
+                       direction: 'ASC'
+                    }]
                 }
             ];
 
             // get the iterations
             async.map( configs, app.wsapiQuery, function(err,results) {
+                var iterations = results[0];
 
-                app.iterations = results[0];
+                if (!app.iterations && app.iterationsDontOverlap(iterations)) {
+                    app.setCheckbox('iterationOverlap', false);
+                }
+                app.iterations = iterations;
 
                 var includeDefects = app.includeDefects();
 
@@ -998,9 +1038,11 @@ Ext.define('CustomApp', {
     },
 
     addPlotLines: function(plotLineType) {
-        var showLabelTitles = this.getCheckboxValue('iterationLabels') && plotLineType == 'iterationStart';
+        var showLabelTitles = plotLineType === 'milestone'
+        					? this.getCheckboxValue('milestoneLabels')
+        				    : this.getCheckboxValue('iterationLabels') && plotLineType == 'iterationStart';
         var xAxis			= this.getChartXAxis();
-        var plotLines = plotLineType == 'milestone'
+        var plotLines = plotLineType === 'milestone'
         				? this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles)
         				: this.getIterationPlotLineConfigs(app.seriesDates, showLabelTitles, plotLineType);
 
@@ -1179,7 +1221,7 @@ Ext.define('CustomApp', {
         var itPlotLines  = itLines ? this.getIterationPlotLineConfigs(seriesDates, this.iterationLabels(), 'iterationStart') : [];
         var itEPlotLines = itLines ? this.getIterationPlotLineConfigs(seriesDates, false, 'iterationEnd') : [];
         var rePlotLines  = this.getPlotLineConfigs(seriesDates, this.selectedReleases, 'ReleaseDate', { dashStyle: 'dot', color: 'grey'} );
-        var miPlotLines  = this.getMilestonePlotLineConfigs(seriesDates, this.milestoneLabels);
+        var miPlotLines  = this.getMilestonePlotLineConfigs(seriesDates, this.milestoneLabels());
 
         return itPlotLines.concat(itEPlotLines).concat(rePlotLines).concat(miPlotLines);
     },
