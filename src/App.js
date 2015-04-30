@@ -524,7 +524,7 @@ Ext.define('CustomApp', {
                        ],
                        sorters: [{
                            property: 'TargetDate',
-                           direction: 'DESC'
+                           direction: 'ASC'
                        }]
         });
 
@@ -1076,7 +1076,8 @@ Ext.define('CustomApp', {
     // which is pretty close.  So we will display that in the color of the milestone.
     //
     getPlotLineConfigs: function(seriesDates, recordArray, dateField, plotLineStyle) {
-        var plotLineCount	= 1;
+        var plotLineLevels	= 3;  // How many levels to display plotline labels (to avoid rendering collisions)
+        var plotLineHeight	= 0;
         var plotLineType	= plotLineStyle.plotLineType || 'unknown';
 
         var plotLineConfigs = _.map(recordArray, function(record){
@@ -1107,12 +1108,11 @@ Ext.define('CustomApp', {
                 var yLabelOffset = -1;
 
                 if (plotLineStyle.showLabelTitles) {
-                    text += labelTitle;
 
-                    if (plotLineCount % 2) {  // Every other title, move down one line, and right with non breaking spaces
+                    yLabelOffset = 15 * plotLineHeight;
 //                        text += '<br><span>\u00A0\u00A0\u00A0</span>';  Does not work with IE
-                        yLabelOffset = 15;
-                    }
+
+                    text += labelTitle + '(' + yLabelOffset + ')';
                 }
 
                 plotLineConfig.label = {
@@ -1124,7 +1124,8 @@ Ext.define('CustomApp', {
                     textAlign: 'left',
                     useHTML: true
                 };
-                plotLineCount++;
+
+                plotLineHeight = plotLineHeight == plotLineLevels-1 ? 0 : plotLineHeight + 1;
 
             } else if (plotLineType == 'iterationStart' && plotLineStyle.showLabelTitles) {
                 plotLineConfig.label = {
