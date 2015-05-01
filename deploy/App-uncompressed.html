@@ -9,296 +9,6 @@
 
     <script type="text/javascript">
         Rally.onReady(function () {
-                Ext.define('Ext.ux.CheckCombo',
-{
-    extend: 'Ext.form.field.ComboBox',
-    alias: 'widget.checkcombo',
-    multiSelect: true,
-    allSelector: false,
-    noData: false,
-    noDataText: 'No combo data',
-    addAllSelector: false,
-    allSelectorHidden: false,
-    enableKeyEvents: true,
-    afterExpandCheck: false,
-    allText: 'All',
-    oldValue: '',
-    listeners:
-    {
-/* uncomment if you want to reload store on every combo expand
-        beforequery: function(qe)
-        {
-            this.store.removeAll();
-            delete qe.combo.lastQuery;
-        },
-*/
-        focus: function(cpt)
-        {
-            cpt.oldValue = cpt.getValue();
-        },
-        keydown: function(cpt, e, eOpts)
-        {
-            var    value = cpt.getRawValue(),
-                oldValue = cpt.oldValue;
-
-            if(value != oldValue) cpt.setValue('');
-        }
-    },
-    createPicker: function()
-    {
-        var    me = this,
-            picker,
-            menuCls = Ext.baseCSSPrefix + 'menu',
-            opts = Ext.apply(
-            {
-                pickerField: me,
-                selModel:
-                {
-                    mode: me.multiSelect ? 'SIMPLE' : 'SINGLE'
-                },
-                floating: true,
-                hidden: true,
-                ownerCt: me.ownerCt,
-                cls: me.el.up('.' + menuCls) ? menuCls : '',
-                store: me.store,
-                displayField: me.displayField,
-                focusOnToFront: false,
-                pageSize: me.pageSize,
-                tpl:
-                [
-                    '<ul><tpl for=".">',
-                        '<li role="option" class="' + Ext.baseCSSPrefix + 'boundlist-item yes-harmonized rui-multi-object-picker"><span class="x-combo-checker">&nbsp;</span> {' + me.displayField + '}</li>',
-                    '</tpl></ul>'
-                ]
-            }, me.listConfig, me.defaultListConfig);
-
-
-        picker = me.picker = Ext.create('Ext.view.BoundList', opts);
-        if(me.pageSize)
-        {
-            picker.pagingToolbar.on('beforechange', me.onPageChange, me);
-        }
-
-
-        me.mon(picker,
-        {
-            itemclick: me.onItemClick,
-            refresh: me.onListRefresh,
-            scope: me
-        });
-
-
-        me.mon(picker.getSelectionModel(),
-        {
-            'beforeselect': me.onBeforeSelect,
-            'beforedeselect': me.onBeforeDeselect,
-            'selectionchange': me.onListSelectionChange,
-            scope: me
-        });
-
-
-        me.store.on('load', function(store)
-        {
-            if(store.getTotalCount() == 0)
-            {
-                me.allSelectorHidden = true;
-                if(me.allSelector != false) me.allSelector.setStyle('display', 'none');
-                if(me.noData != false) me.noData.setStyle('display', 'block');
-            }
-            else
-            {
-                me.allSelectorHidden = false;
-                if(me.allSelector != false) me.allSelector.setStyle('display', 'block');
-                if(me.noData != false) me.noData.setStyle('display', 'none');
-            }
-        });
-
-
-        return picker;
-    },
-    reset: function()
-    {
-        var    me = this;
-
-
-        me.setValue('');
-    },
-    setValue: function(value)
-    {
-        this.value = value;
-        if(!value)
-        {
-            if(this.allSelector != false) this.allSelector.removeCls('rui-picker-cb-checked');
-            return this.callParent(arguments);
-        }
-
-
-        if(typeof value == 'string') {
-            var    me = this,
-                records = [],
-                vals = value.split(',');
-
-
-            if(value == '')
-            {
-                if(me.allSelector != false) me.allSelector.removeCls('rui-picker-cb-checked');
-            }
-            else
-            {
-                if(vals.length == me.store.getCount() && vals.length != 0)
-                {
-                    if(me.allSelector != false) me.allSelector.addCls('rui-picker-cb-checked');
-                    else me.afterExpandCheck = true;
-                }
-            }
-
-
-            Ext.each(vals, function(val)
-            {
-                var record = me.store.getById(parseInt(val));
-                if(record) records.push(record);
-            });
-
-
-            return me.setValue(records);
-        }
-        else return this.callParent(arguments);
-    },
-    getValue: function()
-    {
-        if(typeof this.value == 'object') return this.value.join(',');
-        else return this.value;
-    },
-    getSubmitValue: function()
-    {
-        return this.getValue();
-    },
-    expand: function()
-    {
-        var    me = this,
-            bodyEl, picker, collapseIf;
-
-
-            if(me.rendered && !me.isExpanded && !me.isDestroyed)
-            {
-            bodyEl = me.bodyEl;
-            picker = me.getPicker();
-            collapseIf = me.collapseIf;
-
-
-            // show the picker and set isExpanded flag
-            picker.show();
-            me.isExpanded = true;
-            me.alignPicker();
-            bodyEl.addCls(me.openCls);
-
-
-            if(me.noData == false) me.noData = picker.getEl().down('.x-boundlist-list-ct').insertHtml('beforeBegin', '<div class="x-boundlist-item yes-harmonized rui-multi-object-picker" role="option">'+me.noDataText+'</div>', true);
-
-
-            if(me.addAllSelector == true && me.allSelector == false)
-            {
-                me.allSelector = picker.getEl().down('.x-boundlist-list-ct').insertHtml('beforeBegin', '<div class="x-boundlist-item yes-harmonized rui-multi-object-picker" role="option"><span class="x-combo-checker">&nbsp;</span> '+me.allText+'</div>', true);
-                me.allSelector.on('click', function(e)
-                {
-                console.log('all click func');
-                    if(me.allSelector.hasCls('rui-picker-cb-checked'))
-                    {
-                        me.allSelector.removeCls('rui-picker-cb-checked');
-                        me.setValue('');
-                        me.fireEvent('select', me, []);
-                    } else {
-                        var records = [];
-                        me.store.each(function(record)
-                        {
-                            records.push(record);
-                        });
-                        me.allSelector.addCls('rui-picker-cb-checked');
-                        me.select(records);
-                        me.fireEvent('select', me, records);
-                    }
-                });
-
-                if(me.allSelectorHidden == true) me.allSelector.hide();
-                else me.allSelector.show();
-
-                if(me.afterExpandCheck == true)
-                {
-                    me.allSelector.addCls('rui-picker-cb-checked');
-                    me.afterExpandCheck = false;
-                }
-            }
-
-
-            // monitor clicking and mousewheel
-            me.mon(Ext.getDoc(),
-            {
-                mousewheel: collapseIf,
-                mousedown: collapseIf,
-                scope: me
-            });
-            Ext.EventManager.onWindowResize(me.alignPicker, me);
-            me.fireEvent('expand', me);
-            me.onExpand();
-        }
-        else
-        {
-            me.fireEvent('expand', me);
-            me.onExpand();
-        }
-    },
-    alignPicker: function()
-    {
-        var me = this,
-            picker = me.getPicker();
-
-
-        me.callParent();
-
-        if(me.addAllSelector == true)
-        {
-            var height = picker.getHeight();
-            height = parseInt(height)+20;
-            picker.setHeight(height);
-            picker.getEl().setStyle('height', height+'px');
-        }
-    },
-
-    onListSelectionChange: function(list, selectedRecords) {
-        var me = this,
-            isMulti = me.multiSelect,
-            hasRecords = selectedRecords.length > 0;
-
-        // Only react to selection if it is not called from setValue, and if our list is
-        // expanded (ignores changes to the selection model triggered elsewhere)
-        if (!me.ignoreSelection && me.isExpanded) {
-            if (!isMulti) {
-                Ext.defer(me.collapse, 1, me);
-            }
-            /*
-            * Only set the value here if we're in multi selection mode or we have
-            * a selection. Otherwise setValue will be called with an empty value
-            * which will cause the change event to fire twice.
-            */
-            if (isMulti || hasRecords) {
-                me.setValue(selectedRecords, false);
-            }
-            if (hasRecords) {
-                me.fireEvent('select', me, selectedRecords);
-            }
-            me.inputEl.focus();
-
-            if (me.addAllSelector == true && me.allSelector != false) {
-                if(selectedRecords.length == me.store.getTotalCount()) {
-                	me.allSelector.addCls('rui-picker-cb-checked');
-
-                } else {
-                	me.allSelector.removeCls('rui-picker-cb-checked');
-                }
-            }
-        }
-    }
-});
                 // utility methods
 
 // returns the release name if the app is on a page scoped to a release.
@@ -564,7 +274,21 @@ Ext.define('CustomApp', {
                             app.removePlotLines('iterationEnd');
                             app.addPlotLines('iterationEnd');
                         }
-                    }],
+                    }, { xtype: 'menuseparator' }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'showVelocityTables',
+                        text: 'Velocity Tables',
+                        checked: true,
+                        handler: function(checkbox) {
+                            var panel = app.down('#velocityTablePanel');
+
+                            if (checkbox.checked) {
+                                panel.show();
+                            } else {
+                                panel.hide();
+                            }
+                        }
+                    }]
             }, {
                 xtype: 'rallybutton',
                 itemId: 'selectFeatureButton',
@@ -675,8 +399,8 @@ Ext.define('CustomApp', {
                            },
                            checked: true
                        }, { xtype: 'menuseparator' }
-                ],
-            },
+                ]
+            }
            ]
 
         }, {
@@ -693,7 +417,8 @@ Ext.define('CustomApp', {
             ]
         }, {
             xtype: 'panel',
-            itemId: 'gridPanel',
+            itemId: 'velocityTablePanel',
+            bufferedRenderer: true,
             layout: { type: 'hbox', align: 'left' }
         }
     ],
@@ -739,7 +464,7 @@ Ext.define('CustomApp', {
         var allSelected = true;
 
     	_(menu.items.items).forEach(function(menuItem) {
-            if (menuItem.value && menuItem.checked == false) {
+            if (menuItem.value && menuItem.checked === false) {
                 allSelected = false;
             }
     	});
@@ -852,7 +577,7 @@ Ext.define('CustomApp', {
 //				blur:				setCardboardFiltersFromPrefs,
 
 				scope:				this
-			},
+			}
 //			modelType: 'release',
 //			renderTo: Ext.getBody().dom
 		};
@@ -908,6 +633,38 @@ Ext.define('CustomApp', {
         return values.concat(checkValues);
     },
 
+    //
+    // Check if the end data of a group if iterations overlaps the end date
+    //
+    iterationsDontOverlap: function(iterations) {
+        var overlap	= true;
+        var iter1 	= iterations[0];
+
+        if (iter1 && iterations.length > 1) {
+            var i;
+            var iter1Name = iter1.get('Name');
+            var iter2 = null;
+
+            for (i = 1; i < iterations.length; i++) {
+                var curName = iterations[i].get('Name');
+
+                if (curName != iter1Name) {
+                    iter2 = iterations[i];
+                    break;
+                }
+            }
+
+            if (iter1 && iter2) {
+                var iter1End	= Ext.Date.format(iter1.get('EndDate'), 'Y-M-d');
+                var iter2Start	= Ext.Date.format(iter2.get('StartDate'), 'Y-M-d');
+
+                overlap = iter1End < iter2Start;
+            }
+        }
+
+        return overlap;
+    },
+
     createChart: function() {
         if (!app) {
             app = this;
@@ -953,7 +710,7 @@ Ext.define('CustomApp', {
                        ],
                        sorters: [{
                            property: 'TargetDate',
-                           direction: 'DESC'
+                           direction: 'ASC'
                        }]
         });
 
@@ -974,14 +731,22 @@ Ext.define('CustomApp', {
                 {
                     model  : "Iteration",
                     fetch  : ['Name', 'ObjectID', 'Project', 'StartDate', 'EndDate'],
-                    filters: app.createIterationFilter(app.releases) // XXX app.Releases is an array!
+                    filters: app.createIterationFilter(app.releases), // XXX app.Releases is an array!
+                    sorters: [{
+                       property: 'StartDate',
+                       direction: 'ASC'
+                    }]
                 }
             ];
 
             // get the iterations
             async.map( configs, app.wsapiQuery, function(err,results) {
+                var iterations = results[0];
 
-                app.iterations = results[0];
+                if (!app.iterations && app.iterationsDontOverlap(iterations)) {
+                    app.setCheckbox('iterationOverlap', false);
+                }
+                app.iterations = iterations;
 
                 var includeDefects = app.includeDefects();
 
@@ -1352,7 +1117,7 @@ Ext.define('CustomApp', {
         var filterMap		= this.getFilterIdMap();
         var filteredData	= [];
 
-        if (filterMap == null) {
+        if (filterMap === null) {
             filteredData = snapShotData;
 
         } else {
@@ -1459,11 +1224,13 @@ Ext.define('CustomApp', {
     },
 
     addPlotLines: function(plotLineType) {
-        var showLabelTitles = this.getCheckboxValue('iterationLabels') && plotLineType == 'iterationStart';
+        var showLabelTitles = plotLineType === 'milestone' ?
+        					this.getCheckboxValue('milestoneLabels') :
+        				    this.getCheckboxValue('iterationLabels') && plotLineType == 'iterationStart';
         var xAxis			= this.getChartXAxis();
-        var plotLines = plotLineType == 'milestone'
-        				? this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles)
-        				: this.getIterationPlotLineConfigs(app.seriesDates, showLabelTitles, plotLineType);
+        var plotLines = plotLineType === 'milestone' ?
+        				this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles) :
+        				this.getIterationPlotLineConfigs(app.seriesDates, showLabelTitles, plotLineType);
 
         if (!plotLineType.match('iteration') || app.getCheckboxValue('iterationLines')) {
             _(plotLines).forEach(function(plotLine) {
@@ -1495,7 +1262,8 @@ Ext.define('CustomApp', {
     // which is pretty close.  So we will display that in the color of the milestone.
     //
     getPlotLineConfigs: function(seriesDates, recordArray, dateField, plotLineStyle) {
-        var plotLineCount	= 1;
+        var plotLineLevels	= 3;  // How many levels to display plotline labels (to avoid rendering collisions)
+        var plotLineHeight	= 0;
         var plotLineType	= plotLineStyle.plotLineType || 'unknown';
 
         var plotLineConfigs = _.map(recordArray, function(record){
@@ -1526,12 +1294,11 @@ Ext.define('CustomApp', {
                 var yLabelOffset = -1;
 
                 if (plotLineStyle.showLabelTitles) {
-                    text += labelTitle;
 
-                    if (plotLineCount % 2) {  // Every other title, move down one line, and right with non breaking spaces
+                    yLabelOffset = 15 * plotLineHeight;
 //                        text += '<br><span>\u00A0\u00A0\u00A0</span>';  Does not work with IE
-                        yLabelOffset = 15;
-                    }
+
+                    text += labelTitle; // + '(' + yLabelOffset + ')';
                 }
 
                 plotLineConfig.label = {
@@ -1543,7 +1310,8 @@ Ext.define('CustomApp', {
                     textAlign: 'left',
                     useHTML: true
                 };
-                plotLineCount++;
+
+                plotLineHeight = plotLineHeight == plotLineLevels-1 ? 0 : plotLineHeight + 1;
 
             } else if (plotLineType == 'iterationStart' && plotLineStyle.showLabelTitles) {
                 plotLineConfig.label = {
@@ -1640,7 +1408,7 @@ Ext.define('CustomApp', {
         var itPlotLines  = itLines ? this.getIterationPlotLineConfigs(seriesDates, this.iterationLabels(), 'iterationStart') : [];
         var itEPlotLines = itLines ? this.getIterationPlotLineConfigs(seriesDates, false, 'iterationEnd') : [];
         var rePlotLines  = this.getPlotLineConfigs(seriesDates, this.selectedReleases, 'ReleaseDate', { dashStyle: 'dot', color: 'grey'} );
-        var miPlotLines  = this.getMilestonePlotLineConfigs(seriesDates, this.milestoneLabels);
+        var miPlotLines  = this.getMilestonePlotLineConfigs(seriesDates, this.milestoneLabels());
 
         return itPlotLines.concat(itEPlotLines).concat(rePlotLines).concat(miPlotLines);
     },
@@ -1649,7 +1417,7 @@ Ext.define('CustomApp', {
         var title = '';
 
         var fids	= app.getSpecificFeatureIds();
-        if (fids && fids.length == 0) {
+        if (fids && fids.length === 0) {
           	if (this.includeDefects()) {
                 title = 'Only showing Defects';
           	} else {
@@ -1689,7 +1457,7 @@ Ext.define('CustomApp', {
         }
 
         // Because if we have no title, the spacing changes
-        if (title == '') { title = ' '; }
+        if (title === '') { title = ' '; }
 
         return title;
     },
@@ -2003,7 +1771,7 @@ function projectToZero( data, x) {
 }
                 Ext.define("VelocityCalculator", {
     app: null,
-    gridPanelId: '#gridPanel',
+    gridPanelId: '#velocityTablePanel',
 
     storeFields: ['startName', 'endName', 'days', 'acceptVelocity', 'acceptDelta', 'scopeVelocity', 'scopeDelta',
                     'acceptPoints', 'accPointsPerMo',
@@ -2028,7 +1796,6 @@ function projectToZero( data, x) {
     },
 
     addGridsToPanel: function (grids) {
-
         var panel = this.app.down(this.gridPanelId);
 
         _.each(grids, function(newGrid) {
@@ -2085,7 +1852,7 @@ function projectToZero( data, x) {
         var acceptedPoints	= Math.round(lastEntry[acceptField]);
         var curAccPoints	= acceptedPoints - startAccPoints;
         var totalPoints		= Math.round(lastEntry[storyField]);
-        var remainingPoints	= totalPoints - curAccPoints;
+        var remainingPoints	= totalPoints - acceptedPoints;
         var totalDays	  	= this.subtractDates(endDate, startDate);
         var daysPast	  	= this.subtractDates(compDate, startDate);
         var monthsPast	    = daysPast / 30;
@@ -2134,6 +1901,8 @@ function projectToZero( data, x) {
 
         var that = this;
         var newGrid = Ext.create('Ext.grid.Panel', {
+//            minHeight: 200,
+            bufferedRenderer: true,
             title: 'Overall Stats',
             itemId: 'velocityStatsGrid',
             store: store,
@@ -2455,37 +2224,6 @@ function projectToZero( data, x) {
     </script>
 
 
-    <style type="text/css">
-        /* check combo */
-/*
-.x-combo-checker {
-    background-position: 50% -2px; margin-left: 1px; background-color: transparent; background-image: url("/extjs/resources/themes/images/default/grid/unchecked.gif"); background-position: -1px -1px; background-repeat: no-repeat; height: 14px; width: 14px; display: inline-block;
-}
-
-.x-boundlist-selected .x-combo-checker {
-    background-image: url("/extjs/resources/themes/images/default/grid/checked.gif");
-}
-*/
-.x-combo-checker {
-  background-position: 50% -2px;
-  margin-left: 1px;
-  background-color: transparent;
-  background-image: url("https://rally1.rallydev.com/apps/2.0/rui/resources/themes/images/default/checkbox/checkbox_unselected.png");
-  background-position: -1px -1px;
-  background-repeat: no-repeat;
-  height: 15px;
-  width: 15px;
-  display: inline-block;
-}
-.x-boundlist-selected .x-combo-checker {
-  background-image: url("https://rally1.rallydev.com/apps/2.0/rui/resources/themes/images/default/checkbox/checkbox_selected.png");
-}
-/*
-.rui-picker-checkbox .rui-picker-cb-checked
-.rui-picker-checkbox
-*/
-
-    </style>
     <style type="text/css">
         .app {
   /* Add app styles here */

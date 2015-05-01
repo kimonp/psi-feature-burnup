@@ -1,6 +1,6 @@
 Ext.define("VelocityCalculator", {
     app: null,
-    gridPanelId: '#gridPanel',
+    gridPanelId: '#velocityTablePanel',
 
     storeFields: ['startName', 'endName', 'days', 'acceptVelocity', 'acceptDelta', 'scopeVelocity', 'scopeDelta',
                     'acceptPoints', 'accPointsPerMo',
@@ -25,7 +25,6 @@ Ext.define("VelocityCalculator", {
     },
 
     addGridsToPanel: function (grids) {
-
         var panel = this.app.down(this.gridPanelId);
 
         _.each(grids, function(newGrid) {
@@ -131,6 +130,8 @@ Ext.define("VelocityCalculator", {
 
         var that = this;
         var newGrid = Ext.create('Ext.grid.Panel', {
+//            minHeight: 200,
+            bufferedRenderer: true,
             title: 'Overall Stats',
             itemId: 'velocityStatsGrid',
             store: store,

@@ -103,7 +103,21 @@ Ext.define('CustomApp', {
                             app.removePlotLines('iterationEnd');
                             app.addPlotLines('iterationEnd');
                         }
-                    }],
+                    }, { xtype: 'menuseparator' }, {
+                        xtype: 'menucheckitem',
+                        itemId: 'showVelocityTables',
+                        text: 'Velocity Tables',
+                        checked: true,
+                        handler: function(checkbox) {
+                            var panel = app.down('#velocityTablePanel');
+
+                            if (checkbox.checked) {
+                                panel.show();
+                            } else {
+                                panel.hide();
+                            }
+                        }
+                    }]
             }, {
                 xtype: 'rallybutton',
                 itemId: 'selectFeatureButton',
@@ -214,8 +228,8 @@ Ext.define('CustomApp', {
                            },
                            checked: true
                        }, { xtype: 'menuseparator' }
-                ],
-            },
+                ]
+            }
            ]
 
         }, {
@@ -232,7 +246,8 @@ Ext.define('CustomApp', {
             ]
         }, {
             xtype: 'panel',
-            itemId: 'gridPanel',
+            itemId: 'velocityTablePanel',
+            bufferedRenderer: true,
             layout: { type: 'hbox', align: 'left' }
         }
     ],
@@ -278,7 +293,7 @@ Ext.define('CustomApp', {
         var allSelected = true;
 
     	_(menu.items.items).forEach(function(menuItem) {
-            if (menuItem.value && menuItem.checked == false) {
+            if (menuItem.value && menuItem.checked === false) {
                 allSelected = false;
             }
     	});
@@ -391,7 +406,7 @@ Ext.define('CustomApp', {
 //				blur:				setCardboardFiltersFromPrefs,
 
 				scope:				this
-			},
+			}
 //			modelType: 'release',
 //			renderTo: Ext.getBody().dom
 		};
@@ -465,7 +480,7 @@ Ext.define('CustomApp', {
                 if (curName != iter1Name) {
                     iter2 = iterations[i];
                     break;
-                };
+                }
             }
 
             if (iter1 && iter2) {
@@ -931,7 +946,7 @@ Ext.define('CustomApp', {
         var filterMap		= this.getFilterIdMap();
         var filteredData	= [];
 
-        if (filterMap == null) {
+        if (filterMap === null) {
             filteredData = snapShotData;
 
         } else {
@@ -1038,13 +1053,13 @@ Ext.define('CustomApp', {
     },
 
     addPlotLines: function(plotLineType) {
-        var showLabelTitles = plotLineType === 'milestone'
-        					? this.getCheckboxValue('milestoneLabels')
-        				    : this.getCheckboxValue('iterationLabels') && plotLineType == 'iterationStart';
+        var showLabelTitles = plotLineType === 'milestone' ?
+        					this.getCheckboxValue('milestoneLabels') :
+        				    this.getCheckboxValue('iterationLabels') && plotLineType == 'iterationStart';
         var xAxis			= this.getChartXAxis();
-        var plotLines = plotLineType === 'milestone'
-        				? this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles)
-        				: this.getIterationPlotLineConfigs(app.seriesDates, showLabelTitles, plotLineType);
+        var plotLines = plotLineType === 'milestone' ?
+        				this.getMilestonePlotLineConfigs(app.seriesDates, showLabelTitles) :
+        				this.getIterationPlotLineConfigs(app.seriesDates, showLabelTitles, plotLineType);
 
         if (!plotLineType.match('iteration') || app.getCheckboxValue('iterationLines')) {
             _(plotLines).forEach(function(plotLine) {
@@ -1112,7 +1127,7 @@ Ext.define('CustomApp', {
                     yLabelOffset = 15 * plotLineHeight;
 //                        text += '<br><span>\u00A0\u00A0\u00A0</span>';  Does not work with IE
 
-                    text += labelTitle + '(' + yLabelOffset + ')';
+                    text += labelTitle; // + '(' + yLabelOffset + ')';
                 }
 
                 plotLineConfig.label = {
@@ -1231,7 +1246,7 @@ Ext.define('CustomApp', {
         var title = '';
 
         var fids	= app.getSpecificFeatureIds();
-        if (fids && fids.length == 0) {
+        if (fids && fids.length === 0) {
           	if (this.includeDefects()) {
                 title = 'Only showing Defects';
           	} else {
@@ -1271,7 +1286,7 @@ Ext.define('CustomApp', {
         }
 
         // Because if we have no title, the spacing changes
-        if (title == '') { title = ' '; }
+        if (title === '') { title = ' '; }
 
         return title;
     },

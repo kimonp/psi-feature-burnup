@@ -4,7 +4,6 @@
    "server": "https://rally1.rallydev.com",
    "sdk": "2.0",
    "javascript": [
-      "src/CheckCombo.js",
       "src/utility.js",
       "src/App.js",
       "src/calculator.js",
@@ -14,7 +13,6 @@
       "https://cdnjs.cloudflare.com/ajax/libs/async/1.22/async.min.js"
    ],
    "css": [
-      "CheckCombo.css",
       "app.css"
    ]
 }
