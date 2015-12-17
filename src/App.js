@@ -12,7 +12,7 @@ Ext.define('CustomApp', {
             itemId: 'topPanel',
             layout: { type: 'hbox', align: 'left' },
 
-            items: [{
+            items: [{ /*
                 xtype: 'rallyreleasecombobox',
                 fieldLabel: 'Release:',
                 labelAlign: 'right',
@@ -31,7 +31,7 @@ Ext.define('CustomApp', {
                         app.setSelectedRelease(this);  // This is scoped to the the combobox object
                     }
                 }
-            }, {
+            }, { */
                 xtype: 'rallybutton',
                 itemId: 'selectBurnupLinesButton',
                 labelAlign: 'right',
@@ -131,8 +131,25 @@ Ext.define('CustomApp', {
                     click: function(button, event, eOpts) {
 
                     	if (!app.featureRecords) {
-                            var release = app.releases && app.releases[0];
-                            var relName = release && release.get('Name');
+                            var filters;
+
+                            if (app.parentInitiativeRecord) {
+                                filters = [{
+                                    property: 'Parent.FormattedID',
+                                    operator: '=',
+                                    value: app.parentInitiativeRecord.get('FormattedID')
+                                }];
+
+                            } else {
+                                var release = app.releases && app.releases[0];
+                                var relName = release && release.get('Name');
+
+                                filters = [{
+                                    property: 'Release.Name',
+                                    operator: '=',
+                                    value: relName
+                                }];
+                            }
 
                             button.menu.setLoading(true);
 
@@ -142,11 +159,7 @@ Ext.define('CustomApp', {
                                 model  : app.featureType,
                                 fetch  : ['Name', 'FormattedID',
                                           'LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal'],
-                                filters: [{
-                                    property: 'Release.Name',
-                                    operator: '=',
-                                    value: relName
-                                }]
+                                filters: filters
                             };
                             app.wsapiQuery(config, function(err, featureRecords) {
                                 // Sort by effort remaining to complete
@@ -247,7 +260,6 @@ Ext.define('CustomApp', {
         }, {
             xtype: 'panel',
             itemId: 'velocityTablePanel',
-            bufferedRenderer: true,
             layout: { type: 'hbox', align: 'left' }
         }
     ],
@@ -349,7 +361,7 @@ Ext.define('CustomApp', {
     showProjections: function() { return this.getCheckboxValue('showProjections'); },
     onlyP0s:		 function() { return false; }, // Used to be a checkbox, but now since we have the P0 lines as well, no longer needed
 
-    includeDefects:  function() { return this.getCheckboxValue('includeDefects'); }, // Don't include defects if we are  listing features
+    includeDefects:  function() { return !this.parentInitiativeRecord && this.getCheckboxValue('includeDefects'); }, // Don't include defects if we are  listing features
 
     // Called when the release combo box is ready or selected.  This triggers the building of the chart.
     setSelectedRelease: function(releaseCombo) {
@@ -414,6 +426,52 @@ Ext.define('CustomApp', {
 
     launch: function() {
 		this.velocityCalc = new VelocityCalculator(this);
+        var panel	= this.down('#topPanel');
+
+        var initiativeId = this.getSetting("initiativeId");
+
+        if (initiativeId) {
+            var app = this;
+
+        	var config = {
+				model : "PortfolioItem/Initiative",
+				fetch : true,
+				filters : [ { property:"FormattedID", operator:"=", value:initiativeId} ]
+        	};
+            this.wsapiQuery(config, function(err, records) {
+                	app.parentInitiativeRecord = records[0];
+
+                	if (!app.parentInitiativeRecord) {
+                        Rally.ui.notify.Notifier.show({message: "Can't find initiative: " + initiativeId , color: 'red'});
+
+                	} else {
+                        app.initiativeId = initiativeId; // Setting this puts us in "initiative" mode
+                        app.createChart();
+                	}
+                });
+        } else {
+            panel.insert(0, {
+                    xtype: 'rallyreleasecombobox',
+                    fieldLabel: 'Release:',
+                    labelAlign: 'right',
+                    margin: 8,
+                    width: 300,
+                    itemId: 'releaseCombo',
+                    listeners: {
+                        ready: function () {
+                            var app = this.up('#burnupApp');
+
+                            app.setSelectedRelease(this);  // This is scoped to the the combobox object
+                        },
+                        select: function () {
+                            var app = this.up('#burnupApp');
+
+                            app.setSelectedRelease(this);  // This is scoped to the the combobox object
+                        }
+                    }
+                });
+        }
+
 
         /*
         var picker = this.getTestPicker();
@@ -436,13 +494,13 @@ Ext.define('CustomApp', {
 
         var values = [
             {
+                name: 'initiativeId',
+                xtype: 'rallytextfield',
+                label : "(Optional) FormattedID of a Porfolio Initiative to burn down (which can span releases).  Example: F101"
+            }, {
                 name: 'releases',
                 xtype: 'rallytextfield',
                 label : "Release names to be included (comma seperated)"
-            }, {
-                name: 'epicIds',
-                xtype: 'rallytextfield',
-                label : "(Optional) List of Parent PortfolioItem (Epics) ids to filter Features by"
             }, {
                 name: 'featureIds',
                 xtype: 'rallytextfield',
@@ -503,29 +561,15 @@ Ext.define('CustomApp', {
         app.series           = createSeriesArray();
         app.configReleases   = app.getSetting("releases") || app.defaultRelease;
         app.ignoreZeroValues = app.getSetting("ignoreZeroValues");
-        app.epicIds          = app.getSetting("epicIds");
+//        app.epicIds          = app.getSetting("epicIds");
 //        app.featureIds       = app.getSetting("featureIds");
-
-        if (app.configReleases === "") {
-            this.resetChart("Please Configure this app by selecting Edit App Settings from Configure (gear) Menu");
-            return;
-        }
 
         // get the project id.
         this.project = this.getContext().getProject().ObjectID;
 
-        // get the release (if on a page scoped to the release)
-        var tbName = getReleaseTimeBox(this);
-        // release selected page will over-ride app config
-        app.configReleases = tbName !== "" ? tbName : app.configReleases;
-
         var configs = [];
 
-        // query for estimate values, releases and iterations.
-        configs.push({ model : "Release",
-                       fetch : ['Name', 'ObjectID', 'Project', 'ReleaseStartDate', 'ReleaseDate' ],
-                       filters: [app.createReleaseFilter(app.configReleases)]
-        });
+        // query for estimate values, releases (if needed) and iterations.
         configs.push({ model : "TypeDefinition",
                        fetch : true,
                        filters : [ { property:"Ordinal", operator:"=", value:0} ]
@@ -543,24 +587,51 @@ Ext.define('CustomApp', {
                        }]
         });
 
+        // if no parentInitiative, then we use the release from the release picker
+        if (!app.parentInitiativeRecord) {
+            // get the release (if on a page scoped to the release)
+            var tbName = getReleaseTimeBox(this);
+
+            // release selected page will over-ride app config
+            if (tbName !== "") {
+                app.configReleases = tbName;
+            }
+            if (app.configReleases === "") {
+                this.resetChart("Please Configure this app by selecting Edit App Settings from Configure (gear) Menu");
+                return;
+            }
+            configs.push({ model : "Release",
+                           fetch : ['Name', 'ObjectID', 'Project', 'ReleaseStartDate', 'ReleaseDate' ],
+                           filters: [app.createReleaseFilter(app.configReleases)]
+            });
+        }
+
         // get the preliminary estimate type values, and the releases.
         async.map( configs, app.wsapiQuery, function(err,results) {
+            var filters;
 
-            app.releases    = results[0];
-            app.featureType = results[1][0].get("TypePath");
-            app.milestones  = results[2];
+            app.featureType = results[0][0].get("TypePath");
+            app.milestones  = results[1];
 
-            if (app.releases.length === 0) {
-                app.resetChart("No Releases found with this name: " + app.configReleases);
+            if (app.parentInitiativeRecord) {
+                filters = app.createIterationFilterFromInitiative(app.parentInitiativeRecord);
 
-                return;
+            } else {
+                app.releases    = results[2];
+
+                if (app.releases.length === 0) {
+                    app.resetChart("No Releases found with this name: " + app.configReleases);
+
+                    return;
+                }
+                filters = app.createIterationFilterFromReleases(app.releases); // XXX app.Releases is an array!
             }
 
             configs = [
                 {
                     model  : "Iteration",
                     fetch  : ['Name', 'ObjectID', 'Project', 'StartDate', 'EndDate'],
-                    filters: app.createIterationFilter(app.releases), // XXX app.Releases is an array!
+                    filters: filters,
                     sorters: [{
                        property: 'StartDate',
                        direction: 'ASC'
@@ -622,13 +693,19 @@ Ext.define('CustomApp', {
 
     },
 
+    createIterationFilterFromReleases : function(releases) {
+    	return app.createIterationFilter('release', releases);
+    },
+
+    createIterationFilterFromInitiative : function(initiative) {
+    	return app.createIterationFilter('initiative', initiative);
+    },
+
     // Given several releases, find the earliest starting date and latest ending date of all of them
     // Then create a filter that matches any iterations whose end date is >= the earliest release starting date
     // and <= the latest release ending date
-    createIterationFilter : function(releases) {
-
-        var extent = app.getReleaseExtent(releases);
-
+    createIterationFilter : function(type, records) {
+        var extent = type === 'release' ? app.getReleaseExtent(records) : app.getInitiativeExtent(records);
         var filter = Ext.create('Rally.data.wsapi.Filter', {
             property : 'EndDate', operator: ">=", value: extent.isoStart
         });
@@ -639,6 +716,37 @@ Ext.define('CustomApp', {
         );
 
         return filter;
+    },
+
+    getInitiativeDate: function(record, field) {
+        var actual = record.get('Actual' + field);
+        var planned = record.get('Planned' + field);
+
+        if (!actual && !planned) {
+        	date = '';
+
+        } else if (actual && !planned) {
+        	date = actual;
+        } else if (actual && !planned) {
+        	date = planned;
+
+        } else if (field === 'EndDate') {
+            date = actual > planned ? actual : planned;
+
+        } else if (field === 'StartDate') {
+            date = actual < planned ? actual : planned;
+        }
+
+        return date;
+    },
+
+    getInitiativeExtent : function(record) {
+        var start     = app.getInitiativeDate(record, 'StartDate');
+        var end       = app.getInitiativeDate(record, 'EndDate');
+        var isoStart  = Rally.util.DateTime.toIsoString(start, false);
+        var isoEnd    = Rally.util.DateTime.toIsoString(end, false);
+
+        return { start : start, end : end, isoStart : isoStart, isoEnd : isoEnd };
     },
 
     // Given several releases, find the earliest starting date and latest ending date of all of them
@@ -778,8 +886,8 @@ Ext.define('CustomApp', {
         // var pes = _.pluck(app.features, function(feature) { return feature.get("PreliminaryEstimate");} );
         // console.log("ids",ids,pes);
 
-        var extent = app.getReleaseExtent(app.releases);
-        var relIDs = _.map(app.releases, function (release) { return release.data.ObjectID; });
+        var extent = app.parentInitiativeRecord ? app.getInitiativeExtent(app.parentInitiativeRecord) : app.getReleaseExtent(app.releases);
+        var relIDs = app.releases ? _.map(app.releases, function (release) { return release.data.ObjectID; }) : null;
         var filters;
 
         if (type === 'defect') {
@@ -804,6 +912,12 @@ Ext.define('CustomApp', {
 
             if (featureIds) {
                 filters.FormattedID = { "$in" : featureIds };
+            } else if (app.parentInitiativeRecord) {
+                var id = app.parentInitiativeRecord.get('ObjectID');
+
+                filters['Parent']     = { "$in" : [id] };
+                delete filters.Release;
+
             } else {
                 filters.Release     = { "$in" : relIDs };
             }
@@ -969,9 +1083,11 @@ Ext.define('CustomApp', {
 //        console.log('createChart', app, app.featureSnapshots, app.defectSnapshots);
         var snapshots    = this.includeDefects() && app.defectSnapshots ?
                             app.featureSnapshots.concat(app.defectSnapshots) : app.featureSnapshots;
-        var lumenize     = window.parent.Rally.data.lookback.Lumenize;
+        var lumenize     = Rally.data.lookback.Lumenize;
         var snapShotData = this.filterSnapShotFeatureData(_.map(snapshots,function(d){return d.data;}));
-        var extent       = app.getReleaseExtent(app.releases);
+//        var extent       = app.getReleaseExtent(app.releases);
+        var extent = app.parentInitiativeRecord ? app.getInitiativeExtent(app.parentInitiativeRecord) : app.getReleaseExtent(app.releases);
+        console.log('extent', extent);
 
         // can be used to 'knockout' holidays
         var holidays = [
